@@ -1,0 +1,41 @@
+name: build-mcp-docker-connector
+on:
+  workflow_dispatch:
+  push:
+    paths: ['UPSTREAM_REF', 'Dockerfile.gateway', '.github/workflows/build.yml']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: pin
+        run: echo "ref=$(cat UPSTREAM_REF)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build pinned upstream
+        uses: docker/build-push-action@v6
+        with:
+          context: https://github.com/ckreiling/mcp-server-docker.git#${{ steps.pin.outputs.ref }}
+          tags: local/mcp-server-docker:pinned
+          push: false
+          load: true
+
+      - name: Build i publikuj gateway
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.gateway
+          push: true
+          tags: |
+            ghcr.io/radzupl/mcp-docker-connector:latest
+            ghcr.io/radzupl/mcp-docker-connector:${{ steps.pin.outputs.ref }}
