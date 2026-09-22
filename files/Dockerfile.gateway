@@ -1,0 +1,4 @@
+FROM node:20-slim
+ARG MCP_FS_VERSION
+RUN npm install -g @modelcontextprotocol/server-filesystem@${MCP_FS_VERSION} supergateway
+CMD ["sh", "-c", "npx -y supergateway --stdio \"mcp-server-filesystem $ALLOWED_DIRS\" --outputTransport streamableHttp --port 8000 --oauth2Bearer \"$MCP_BEARER_TOKEN\""]

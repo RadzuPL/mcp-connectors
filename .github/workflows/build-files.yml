@@ -1,0 +1,38 @@
+name: build-files-connector
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths: ['files/UPSTREAM_REF', 'files/Dockerfile.gateway', '.github/workflows/build-files.yml']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: pin
+        run: |
+          echo "ver=$(cat files/UPSTREAM_REF)" >> "$GITHUB_OUTPUT"
+          echo "tag=$(date -u +%Y-%m-%d)-$(cat files/UPSTREAM_REF)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build i publikuj gateway
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: files/Dockerfile.gateway
+          push: true
+          build-args: |
+            MCP_FS_VERSION=${{ steps.pin.outputs.ver }}
+          tags: |
+            ghcr.io/radzupl/mcp-connectors/files:latest
+            ghcr.io/radzupl/mcp-connectors/files:${{ steps.pin.outputs.tag }}
