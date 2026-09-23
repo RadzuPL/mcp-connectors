@@ -13,7 +13,7 @@ i to jest wymuszane niżej niż na poziomie samego serwera MCP (patrz
 |---|---|---|---|---|
 | `mcp-docker-connector` | [`docker/`](docker/) | `ghcr.io/radzupl/mcp-connectors/docker` | Odczyt stanu kontenerów, obrazów, logów przez Docker API | tylko odczyt (wymuszone przez docker-socket-proxy przed nim, nie przez sam serwer MCP) |
 | `mcp-files-connector` | [`files/`](files/) | `ghcr.io/radzupl/mcp-connectors/files` | Odczyt plików z wybranych folderów na serwerze | tylko odczyt (wymuszone przez `:ro` bind mounty), zakres folderów rośnie w miarę potrzeb |
-| `mcp-metrics-connector` | *(planowany)* | `ghcr.io/radzupl/mcp-connectors/metrics` *(planowany)* | CPU/RAM/GPU telemetry (Glances + nvidia-status) | tylko odczyt, czysta telemetria, bez akcji |
+| `mcp-metrics-connector` | [`metrics/`](metrics/) | `ghcr.io/radzupl/mcp-connectors/metrics` | Telemetria CPU/RAM (Glances) - `mcp-proxy` łączy się do istniejącego serwera SSE Glances i wystawia go dalej po streamable-HTTP | tylko odczyt, czysta telemetria, bez akcji |
 
 Każdy connector jest wystawiony pod osobną subdomeną przez jeden tunel
 Cloudflare (`cloudflared-mcp`), z osobnym tokenem bearer i osobnym

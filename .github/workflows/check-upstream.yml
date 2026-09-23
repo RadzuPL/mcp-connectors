@@ -70,3 +70,36 @@ jobs:
             Merge tego PR-a odpala build-files.yml i publikuje nowy obraz.
           branch: bump/files-upstream
           add-paths: files/UPSTREAM_REF
+
+  check-metrics:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sprawdź najnowszą wersję na PyPI
+        id: latest
+        run: |
+          LATEST=$(curl -s https://pypi.org/pypi/mcp-proxy/json | python3 -c "import json,sys; print(json.load(sys.stdin)['info']['version'])")
+          echo "ver=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Podmień UPSTREAM_REF jeśli inny
+        run: |
+          if [ "$(cat metrics/UPSTREAM_REF)" != "${{ steps.latest.outputs.ver }}" ]; then
+            echo "${{ steps.latest.outputs.ver }}" > metrics/UPSTREAM_REF
+          fi
+
+      - name: Otwórz PR (tylko jeśli jest zmiana)
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "metrics: bump mcp-proxy to ${{ steps.latest.outputs.ver }}"
+          title: "metrics connector: nowa wersja PyPI (${{ steps.latest.outputs.ver }})"
+          body: |
+            mcp-proxy (sparfenyuk) ma nową wersję na PyPI.
+            Changelog: https://github.com/sparfenyuk/mcp-proxy/releases
+
+            Merge tego PR-a odpala build-metrics.yml i publikuje nowy obraz.
+          branch: bump/metrics-upstream
+          add-paths: metrics/UPSTREAM_REF
