@@ -2,8 +2,7 @@ name: build-metrics-connector
 on:
   workflow_dispatch:
   push:
-    branches: [master]
-    paths: ['metrics/UPSTREAM_REF', 'metrics/Dockerfile.gateway', 'metrics/run-proxy.sh', '.github/workflows/build-metrics.yml']
+    paths: ['metrics/Dockerfile.gateway', 'metrics/run-proxy.sh', '.github/workflows/build-metrics.yml']
 
 jobs:
   build:
@@ -13,11 +12,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-
-      - id: pin
-        run: |
-          echo "ver=$(cat metrics/UPSTREAM_REF)" >> "$GITHUB_OUTPUT"
-          echo "tag=$(date -u +%Y-%m-%d)-$(cat metrics/UPSTREAM_REF)" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v3
         with:
@@ -31,8 +25,6 @@ jobs:
           context: ./metrics
           file: ./metrics/Dockerfile.gateway
           push: true
-          build-args: |
-            MCP_PROXY_VERSION=${{ steps.pin.outputs.ver }}
           tags: |
             ghcr.io/radzupl/mcp-connectors/metrics:latest
-            ghcr.io/radzupl/mcp-connectors/metrics:${{ steps.pin.outputs.tag }}
+            ghcr.io/radzupl/mcp-connectors/metrics:${{ github.sha }}
