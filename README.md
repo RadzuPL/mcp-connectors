@@ -15,6 +15,22 @@ i to jest wymuszane niżej niż na poziomie samego serwera MCP (patrz
 | `mcp-files-connector` | [`files/`](files/) | `ghcr.io/radzupl/mcp-connectors/files` | Odczyt plików z wybranych folderów na serwerze | tylko odczyt (wymuszone przez `:ro` bind mounty), zakres folderów rośnie w miarę potrzeb |
 | `mcp-metrics-connector` | [`metrics/`](metrics/) | `ghcr.io/radzupl/mcp-connectors/metrics` | Telemetria CPU/RAM (Glances) - `mcp-proxy` łączy się do istniejącego serwera SSE Glances i wystawia go dalej po streamable-HTTP | tylko odczyt, czysta telemetria, bez akcji |
 
+**`mcp-metrics-connector` działa inaczej niż pozostałe dwa** i warto o tym
+pamiętać zanim ktoś zacznie szukać, czemu "nie ma narzędzi":
+
+- Serwer Glances wystawia po MCP wyłącznie *resources* i *prompts* - zero
+  *tools*. Claude nie odpytuje go sam w trakcie rozmowy; dane trzeba
+  ręcznie dołączyć przez "+ Add content" → "Add from Martinez Metrics"
+  (np. "All stats", "System health summary").
+- Gateway nie opakowuje jednego przypiętego, cudzego repo jak `docker/`
+  i `files/` - tylko składa dwa niezależnie wersjonowane, gotowe
+  narzędzia (`mcp-proxy` + `supergateway`). Stąd brak pliku
+  `UPSTREAM_REF` i osobny akapit w sekcji aktualizacji niżej.
+- `metrics/Dockerfile.gateway` ma przypięte `"mcp<2.0"` obok
+  `mcp-proxy` - `mcp-proxy` 0.12.0 (najnowszy w chwili pisania) importuje
+  `request_ctx` ze starej lokalizacji, której nie ma już w `mcp` 2.x.
+  Bez tego pinu kontener wywala się przy starcie (`ImportError`).
+
 Każdy connector jest wystawiony pod osobną subdomeną przez jeden tunel
 Cloudflare (`cloudflared-mcp`), z osobnym tokenem bearer i osobnym
 connectorem skonfigurowanym w Claude. Żaden token nie działa na drugim
@@ -55,6 +71,14 @@ buduje ani nie publikuje automatycznie - dopiero merge tego PR-a (czyli
 kompromis: zero ręcznego szukania nowych wersji, ale zawsze jest moment
 przeglądu zanim coś nowego trafi na serwer.
 
+`mcp-metrics-connector` to wyjątek od powyższego: nie opakowuje jednego
+przypiętego, zewnętrznego repo, tylko składa dwa gotowe narzędzia
+(`mcp-proxy`, `supergateway`) instalowane z PyPI/npm bezpośrednio w
+Dockerfile. Nie ma tu `UPSTREAM_REF` i `check-upstream.yml` go nie
+śledzi (nie ma dla niego joba) - wersje pakietów (w tym pin `mcp<2.0`)
+aktualizuje się ręcznie w `metrics/Dockerfile.gateway`, gdy zajdzie
+potrzeba.
+
 Każdy zbudowany obraz dostaje, oprócz `:latest`, własny niezmienny tag
 (`data-skrócony_ref`), więc da się w każdej chwili wrócić do konkretnego
 builda.
@@ -68,7 +92,8 @@ będzie mógł otworzyć PR-a.
 
 1. Nowy folder na poziomie repo (np. `metrics/`).
 2. `Dockerfile.gateway` w tym folderze + `UPSTREAM_REF` jeśli opakowuje
-   cudzy kod.
+   cudzy kod (jeden przypięty, zewnętrzny build - patrz wyjątek metrics
+   wyżej, jeśli connector tylko składa gotowe pakiety).
 3. `.github/workflows/build-<nazwa>.yml`, trigger na paths ograniczony
    do plików tego folderu (żeby nie odpalał się przy zmianach w innych
    connectorach).
