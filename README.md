@@ -1,5 +1,7 @@
 # mcp-connectors
 
+*([Polska wersja poniżej ↓](#polski))*
+
 Gateway containers that take an existing MCP server — often stdio-only, or speaking a
 legacy transport — and re-expose it as an authenticated streamable-HTTP endpoint, so it
 can be added as a custom connector in Claude or any other MCP client that speaks
@@ -104,20 +106,124 @@ automatically — nothing to edit, the workflows derive the path from the repo t
 check "Allow GitHub Actions to create and approve pull requests" — otherwise
 `check-upstream.yml` won't be able to open its PRs.
 
-## Adding a new connector
-
-1. New top-level folder (e.g. `metrics/`).
-2. `Dockerfile.gateway` in that folder, plus `UPSTREAM_REF` if it vendors someone else's
-   pinned code (skip it if, like `metrics/`, it only composes independently-versioned
-   off-the-shelf tools — see that folder's README for the reasoning).
-3. `.github/workflows/build-<name>.yml`, triggered on `paths` scoped to that folder's
-   files only, so it doesn't rebuild on unrelated changes.
-4. If it should track an upstream, add a second job to `check-upstream.yml`.
-5. A new public hostname and a matching access rule wherever you expose it, plus a new
-   connector configured in your MCP client with its own token.
-6. A `README.md` in the folder: what it wraps, its parameter table, a docker-compose
-   example, and any caveats specific to it.
-
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+<a id="polski"></a>
+## Polski
+
+*([English version above ↑](#mcp-connectors))*
+
+Kontenery-gatewaye, które biorą istniejący serwer MCP — często dostępny tylko po stdio,
+albo mówiący starszym transportem — i wystawiają go na zewnątrz jako uwierzytelniony
+endpoint streamable-HTTP, żeby dało się go dodać jako custom connector w Claude albo w
+dowolnym innym kliencie MCP, który mówi streamable-HTTP.
+
+To repo wzięło się z podłączania agenta AI do jednego konkretnego domowego serwera, ale
+nic tu nie jest do niego przywiązane. Każdy element — wzorzec gatewaya, wymuszanie trybu
+tylko-do-odczytu, automatyzacja aktualizacji — działa tak samo na dowolnym hoście
+Dockera, do którego go skierujesz.
+
+### Zasada projektowa: blast radius
+
+Każdy connector dostaje własny kontener, własny bearer token, własny wystawiony
+hostname/ścieżkę i własną regułę dostępu tam, gdzie terminujesz TLS. Żaden connector nie
+może zrobić więcej niż to, do czego został zbudowany, a ta granica jest wymuszana
+**poniżej** samego serwera MCP, a nie przez zaufanie do flag serwera czy dobrego
+zachowania modelu:
+
+- proxy przed socketem/API, które twardo blokuje wywołania mutujące (`POST=0` na
+  `docker-socket-proxy`, w przykładzie `docker/`), albo
+- mount `:ro`, dzięki któremu serwer plikowy fizycznie nie ma na czym zapisać, nawet
+  jeśli jego własny kod ma narzędzie do zapisu (przykład `files/`).
+
+To defense in depth: nawet gdyby dany serwer MCP miał błąd, albo trafiła do niego
+złośliwa zmiana w kodzie, warstwa niżej i tak by to zablokowała.
+
+### Jak działa connector
+
+```
+MCP client (streamable-HTTP, bearer token)
+   -> gateway container: supergateway (stdio -> streamable-HTTP, own bearer token)
+       -> the wrapped MCP server (stdio)
+```
+
+Jeśli opakowywany serwer mówi tylko starym transportem SSE zamiast stdio, dochodzi jeden
+dodatkowy hop — most łączący się z nim jako klient i wystawiający go z powrotem po
+stdio, żeby `supergateway` miał co opakować (zobacz `metrics/` — działający przykład z
+użyciem [`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy)):
+
+```
+MCP client (streamable-HTTP, bearer token)
+   -> gateway container: supergateway (stdio -> streamable-HTTP, own bearer token)
+       -> mcp-proxy (SSE client -> stdio)
+           -> the wrapped MCP server (SSE transport)
+```
+
+Występują dwa niezależne sekrety, i nigdy nie są tym samym: bearer token, który klient
+pokazuje gatewayowi, oraz (tylko tam gdzie to istotne) dane uwierzytelniające, których
+sam gateway potrzebuje, żeby dostać się do opakowywanego serwera.
+
+### Connectory w tym repo
+
+W repo są trzy przykładowe connectory, każdy opakowuje inny, prawdziwy serwer MCP. Pełne
+tabele parametrów i przykłady docker-compose są w README każdego connectora.
+
+| Connector | Folder | Opakowuje | Tryb tylko-do-odczytu wymuszony przez |
+|---|---|---|---|
+| docker | [`docker/`](docker/README.md) | [`ckreiling/mcp-server-docker`](https://github.com/ckreiling/mcp-server-docker), przypięty do commita | `docker-socket-proxy` przed nim (`POST=0`) |
+| files | [`files/`](files/README.md) | oficjalny [`@modelcontextprotocol/server-filesystem`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | mounty `:ro` (świadomie zamieniane na `:rw` per folder, jeśli chcesz dostęp do zapisu) |
+| metrics | [`metrics/`](metrics/README.md) | serwer MCP tylko-SSE (zbudowany i przetestowany na [Glances](https://nicolargo.github.io/glances/)) przez łańcuch `mcp-proxy` + `supergateway` | nie ma czego wymuszać — opakowywany serwer wystawia tylko zasoby (resources) i prompty do odczytu, zero narzędzi (tools) |
+
+`metrics/` jest wyjątkiem celowo: nie opakowuje jednego przypiętego upstreamu jak
+pozostałe dwa, tylko składa dwa niezależnie wersjonowane, gotowe narzędzia. Zobacz jego
+README, dlaczego oznacza to brak `UPSTREAM_REF` i brak joba auto-bumpującego.
+
+### Wystawianie kontenera gatewaya
+
+Każdy gateway nasłuchuje na porcie 8000 wewnątrz kontenera i oczekuje
+`Authorization: Bearer <MCP_BEARER_TOKEN>`. Doprowadzenie ruchu HTTPS do tego portu jest
+poza zakresem tego repo — postaw go za dowolnym reverse proxy albo tunelem, którego już
+używasz: Cloudflare Tunnel, Tailscale Funnel/Serve, nginx + Let's Encrypt, Caddy,
+cokolwiek, co potrafi terminować TLS i przekazać ruch do kontenera. Skieruj swojego
+klienta MCP na `https://<twój-host>/mcp` z tym nagłówkiem.
+
+Jeśli używasz Cloudflare Tunnel, [`docs/exposing-with-cloudflare-tunnel.md`](docs/exposing-with-cloudflare-tunnel.md)
+prowadzi przez jeden konkretny setup, razem z dwiema pułapkami, o których warto wiedzieć
+z góry: kolejnością operatorów w wyrażeniach reguł Cloudflare i prawdziwym bugiem w
+Glances, który psuje każdy deployment za reverse proxy na domyślnym porcie HTTPS.
+
+### Pół-automatyczne aktualizacje upstreamu
+
+Connectory, które opakowują cudzy kod (`ckreiling/mcp-server-docker`, oficjalny
+`@modelcontextprotocol/server-filesystem`), przypinają budowaną wersję w pliku
+`UPSTREAM_REF` w swoim folderze, zamiast śledzić `main`/`latest` na żywo. Ta wersja
+zmienia się tylko przez świadomy, przejrzany merge.
+
+`check-upstream.yml` odpala się co tydzień, sprawdza czy upstream ma coś nowszego, i
+jeśli tak — sam otwiera Pull Requesta z bumpem `UPSTREAM_REF`. Nic się nie buduje ani nie
+publikuje automatycznie — dopiero zmergowanie tego PR-a (świadoma decyzja) odpala
+właściwy build i aktualizuje `:latest`. To kompromis: zero ręcznego szukania nowych
+wersji, ale zawsze jest moment przeglądu, zanim coś nowego trafi na twój serwer.
+
+`metrics/` jest wyjątkiem: nie opakowuje jednego przypiętego, zewnętrznego repo, tylko
+składa dwa gotowe narzędzia (`mcp-proxy`, `supergateway`) instalowane wprost z PyPI/npm w
+Dockerfile. Nie ma tu `UPSTREAM_REF`, a `check-upstream.yml` nie ma dla niego joba —
+aktualizacja wersji tych pakietów (w tym pin `mcp<2.0`, zobacz jego README) to ręczna
+edycja `metrics/Dockerfile.gateway`, gdy zajdzie potrzeba.
+
+Każdy zbudowany obraz dostaje, obok `:latest`, własny niezmienny tag, więc zawsze można
+wrócić do konkretnego builda. Obrazy publikują się pod
+`ghcr.io/<twój-użytkownik-lub-organizacja-github>/<to-repo>/<connector>` automatycznie —
+nic do edycji, workflowy same wyliczają ścieżkę z repo, w którym się odpalają.
+
+**Wymaga jednorazowo:** w ustawieniach swojego repo, Settings → Actions → General →
+Workflow permissions, zaznacz "Allow GitHub Actions to create and approve pull
+requests" — inaczej `check-upstream.yml` nie będzie mógł otwierać swoich PR-ów.
+
+### Licencja
+
+MIT — patrz [LICENSE](LICENSE).
