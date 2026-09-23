@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # mcp-proxy (sparfenyuk): łączy się jako klient do istniejącego serwera SSE
 # i wystawia go z powrotem po stdio.
-RUN pip install --no-cache-dir mcp-proxy
+RUN pip install --no-cache-dir "mcp<2.0" mcp-proxy
 
 COPY run-proxy.sh /app/run-proxy.sh
 RUN chmod +x /app/run-proxy.sh
