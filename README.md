@@ -1,107 +1,123 @@
-# martinez-mcp-connectors
+# mcp-connectors
 
-MCP connectory łączące Claude z moim domowym serwerem Unraid ("Martinez"),
-budowane pod jedną zasadą: **każdy connector ma osobny blast radius**.
-Osobny token, osobny kontener, osobny publiczny hostname, osobna reguła
-dostępu. Żaden nie może zrobić więcej niż to, do czego został pomyślany -
-i to jest wymuszane niżej niż na poziomie samego serwera MCP (patrz
-"Dlaczego docker-socket-proxy / :ro mounty" niżej).
+Gateway containers that take an existing MCP server — often stdio-only, or speaking a
+legacy transport — and re-expose it as an authenticated streamable-HTTP endpoint, so it
+can be added as a custom connector in Claude or any other MCP client that speaks
+streamable-HTTP.
 
-## Connectory
+This repo grew out of connecting an AI agent to a single home server, but nothing in it
+is tied to that server. Every piece here — the gateway pattern, the read-only
+enforcement, the update automation — works the same on any Docker host you point it at.
 
-| Connector | Folder | Obraz | Co robi | Zakres |
-|---|---|---|---|---|
-| `mcp-docker-connector` | [`docker/`](docker/) | `ghcr.io/radzupl/mcp-connectors/docker` | Odczyt stanu kontenerów, obrazów, logów przez Docker API | tylko odczyt (wymuszone przez docker-socket-proxy przed nim, nie przez sam serwer MCP) |
-| `mcp-files-connector` | [`files/`](files/) | `ghcr.io/radzupl/mcp-connectors/files` | Odczyt plików z wybranych folderów na serwerze | tylko odczyt (wymuszone przez `:ro` bind mounty), zakres folderów rośnie w miarę potrzeb |
-| `mcp-metrics-connector` | [`metrics/`](metrics/) | `ghcr.io/radzupl/mcp-connectors/metrics` | Telemetria CPU/RAM (Glances) - `mcp-proxy` łączy się do istniejącego serwera SSE Glances i wystawia go dalej po streamable-HTTP | tylko odczyt, czysta telemetria, bez akcji |
+## Design principle: blast radius
 
-**`mcp-metrics-connector` działa inaczej niż pozostałe dwa** i warto o tym
-pamiętać zanim ktoś zacznie szukać, czemu "nie ma narzędzi":
+Every connector gets its own container, its own bearer token, its own exposed
+hostname/path, and its own access rule wherever you terminate TLS. No connector can do
+more than it was built for, and that boundary is enforced **below** the MCP server
+itself, not by trusting the server's own flags or the model's good behavior:
 
-- Serwer Glances wystawia po MCP wyłącznie *resources* i *prompts* - zero
-  *tools*. Claude nie odpytuje go sam w trakcie rozmowy; dane trzeba
-  ręcznie dołączyć przez "+ Add content" → "Add from Martinez Metrics"
-  (np. "All stats", "System health summary").
-- Gateway nie opakowuje jednego przypiętego, cudzego repo jak `docker/`
-  i `files/` - tylko składa dwa niezależnie wersjonowane, gotowe
-  narzędzia (`mcp-proxy` + `supergateway`). Stąd brak pliku
-  `UPSTREAM_REF` i osobny akapit w sekcji aktualizacji niżej.
-- `metrics/Dockerfile.gateway` ma przypięte `"mcp<2.0"` obok
-  `mcp-proxy` - `mcp-proxy` 0.12.0 (najnowszy w chwili pisania) importuje
-  `request_ctx` ze starej lokalizacji, której nie ma już w `mcp` 2.x.
-  Bez tego pinu kontener wywala się przy starcie (`ImportError`).
+- a proxy in front of a socket/API that hard-blocks mutating calls (`POST=0` on
+  `docker-socket-proxy`, in the `docker/` example), or
+- a `:ro` bind mount so a filesystem server has nothing to write to, even if its own
+  code has a write tool (the `files/` example).
 
-Każdy connector jest wystawiony pod osobną subdomeną przez jeden tunel
-Cloudflare (`cloudflared-mcp`), z osobnym tokenem bearer i osobnym
-connectorem skonfigurowanym w Claude. Żaden token nie działa na drugim
-connectorze.
+This is defense in depth: even if a given MCP server had a bug, or a malicious change
+landed in its code, the layer underneath would still stop it.
 
-## Dlaczego docker-socket-proxy / :ro mounty
+## How a connector works
 
-Żaden z tych serwerów MCP nie ma wbudowanego, wymuszalnego trybu
-"tylko odczyt" - to zwykle flaga aplikacyjna, którą można obejść albo
-która po prostu nie istnieje dla wszystkich operacji. Dlatego odczyt
-wymuszamy warstwę niżej, tam gdzie sam serwer MCP nie ma już nic do
-powiedzenia:
+```
+MCP client (streamable-HTTP, bearer token)
+   -> gateway container: supergateway (stdio -> streamable-HTTP, own bearer token)
+       -> the wrapped MCP server (stdio)
+```
 
-- **Docker** - `docker-socket-proxy` (tecnativa) stoi między connectorem
-  a `docker.sock`. `POST=0` blokuje wszystkie operacje mutujące,
-  niezależnie od tego jakie flagi zasobów są włączone. Nawet gdyby
-  connector chciał coś utworzyć albo skasować, proxy odpowie 403 zanim
-  to dotrze do prawdziwego Dockera.
-- **Pliki** - foldery są montowane do kontenera z flagą `:ro` na poziomie
-  Dockera. Serwer plikowy ma narzędzia do zapisu i kasowania w swoim
-  kodzie, ale fizycznie nie ma jak zapisać na mouncie tylko-do-odczytu.
+If the wrapped server only speaks the legacy SSE transport instead of stdio, add one
+more hop — a client-side bridge that connects to it and re-exposes it over stdio, so
+`supergateway` has something it can wrap (see `metrics/` for a working example using
+[`mcp-proxy`](https://github.com/sparfenyuk/mcp-proxy)):
 
-To jest defense in depth: nawet gdyby sam serwer MCP miał błąd albo
-złośliwą zmianę w kodzie, warstwa niżej i tak by to zablokowała.
+```
+MCP client (streamable-HTTP, bearer token)
+   -> gateway container: supergateway (stdio -> streamable-HTTP, own bearer token)
+       -> mcp-proxy (SSE client -> stdio)
+           -> the wrapped MCP server (SSE transport)
+```
 
-## Aktualizacje upstreamu - pół-auto
+Two independent secrets are involved, and they are never the same thing: the bearer
+token the client presents to the gateway, and (only where relevant) whatever
+credentials the gateway itself needs to reach the wrapped server.
 
-Każdy connector opakowuje cudzy kod (ckreiling/mcp-server-docker,
-oficjalny `@modelcontextprotocol/server-filesystem`). Zamiast śledzić
-`main`/`latest` na żywo, wersja jest przypięta w pliku `UPSTREAM_REF`
-w folderze danego connectora - i zmienia się tylko przez świadomy,
-przejrzany merge.
+## Connectors in this repo
 
-`check-upstream.yml` co tydzień sprawdza czy upstream ma coś nowego i
-jeśli tak, sam otwiera Pull Requesta z bumpem `UPSTREAM_REF`. Nic się nie
-buduje ani nie publikuje automatycznie - dopiero merge tego PR-a (czyli
-świadoma decyzja) odpala właściwy build i aktualizuje `:latest`. To
-kompromis: zero ręcznego szukania nowych wersji, ale zawsze jest moment
-przeglądu zanim coś nowego trafi na serwer.
+Three example connectors are included, each wrapping a different real MCP server. Full
+parameter tables and docker-compose examples live in each connector's own README.
 
-`mcp-metrics-connector` to wyjątek od powyższego: nie opakowuje jednego
-przypiętego, zewnętrznego repo, tylko składa dwa gotowe narzędzia
-(`mcp-proxy`, `supergateway`) instalowane z PyPI/npm bezpośrednio w
-Dockerfile. Nie ma tu `UPSTREAM_REF` i `check-upstream.yml` go nie
-śledzi (nie ma dla niego joba) - wersje pakietów (w tym pin `mcp<2.0`)
-aktualizuje się ręcznie w `metrics/Dockerfile.gateway`, gdy zajdzie
-potrzeba.
+| Connector | Folder | Wraps | Read-only enforced by |
+|---|---|---|---|
+| docker | [`docker/`](docker/README.md) | [`ckreiling/mcp-server-docker`](https://github.com/ckreiling/mcp-server-docker), pinned to a commit | `docker-socket-proxy` in front of it (`POST=0`) |
+| files | [`files/`](files/README.md) | the official [`@modelcontextprotocol/server-filesystem`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | `:ro` bind mounts (swap for `:rw` deliberately, per folder, if you want write access) |
+| metrics | [`metrics/`](metrics/README.md) | an SSE-only MCP server (built against [Glances](https://nicolargo.github.io/glances/)) via an `mcp-proxy` + `supergateway` chain | nothing to enforce — the wrapped server only exposes read-only resources and prompts, no tools |
 
-Każdy zbudowany obraz dostaje, oprócz `:latest`, własny niezmienny tag
-(`data-skrócony_ref`), więc da się w każdej chwili wrócić do konkretnego
-builda.
+`metrics/` is the odd one out on purpose: it doesn't vendor a single pinned upstream
+like the other two, it composes two independently-versioned off-the-shelf tools. See
+its README for why that means no `UPSTREAM_REF` and no auto-bump job for it.
 
-**Wymaga jednorazowo:** w ustawieniach repo, Settings → Actions →
-General → Workflow permissions, zaznaczyć "Allow GitHub Actions to
-create and approve pull requests" - inaczej `check-upstream.yml` nie
-będzie mógł otworzyć PR-a.
+## Exposing a gateway container
 
-## Dodawanie nowego connectora
+Each gateway listens on port 8000 inside its container and expects
+`Authorization: Bearer <MCP_BEARER_TOKEN>`. Getting HTTPS traffic to that port is
+outside the scope of this repo — put it behind whatever reverse proxy or tunnel you
+already use: Cloudflare Tunnel, Tailscale Funnel/Serve, nginx + Let's Encrypt, Caddy,
+anything that can terminate TLS and forward to a container. Point your MCP client at
+`https://<your-host>/mcp` with that header.
 
-1. Nowy folder na poziomie repo (np. `metrics/`).
-2. `Dockerfile.gateway` w tym folderze + `UPSTREAM_REF` jeśli opakowuje
-   cudzy kod (jeden przypięty, zewnętrzny build - patrz wyjątek metrics
-   wyżej, jeśli connector tylko składa gotowe pakiety).
-3. `.github/workflows/build-<nazwa>.yml`, trigger na paths ograniczony
-   do plików tego folderu (żeby nie odpalał się przy zmianach w innych
-   connectorach).
-4. Jeśli ma śledzić upstream, dopisać drugi job do `check-upstream.yml`.
-5. Nowa subdomena, nowa reguła Cloudflare (albo dopisanie `or
-   http.host eq "..."` do istniejącej), nowy connector w Claude z
-   własnym tokenem.
+If you use Cloudflare Tunnel, [`docs/exposing-with-cloudflare-tunnel.md`](docs/exposing-with-cloudflare-tunnel.md)
+walks through one concrete setup, including two gotchas worth knowing about up front:
+an operator-precedence trap in Cloudflare's rule expressions, and a real upstream bug
+in Glances that breaks any reverse-proxied deployment on the default HTTPS port.
 
-## Licencja
+## Semi-automatic upstream updates
 
-MIT - patrz [LICENSE](LICENSE).
+Connectors that vendor someone else's code (`ckreiling/mcp-server-docker`, the official
+`@modelcontextprotocol/server-filesystem`) pin the version they build in an
+`UPSTREAM_REF` file in their folder, instead of tracking `main`/`latest` live. That
+version only changes through a deliberate, reviewed merge.
+
+`check-upstream.yml` runs weekly, checks whether the upstream has something newer, and
+if so opens a pull request bumping `UPSTREAM_REF` on its own. Nothing builds or
+publishes automatically — merging that PR (a conscious decision) is what triggers the
+real build and updates `:latest`. It's a trade-off: zero manual version-hunting, but
+still a review step before anything new reaches your server.
+
+`metrics/` is the exception: it doesn't vendor one pinned external repo, it composes two
+off-the-shelf tools (`mcp-proxy`, `supergateway`) installed straight from PyPI/npm in its
+Dockerfile. It has no `UPSTREAM_REF` and `check-upstream.yml` has no job for it —
+bumping those package versions (including the `mcp<2.0` pin, see its README) is a manual
+edit to `metrics/Dockerfile.gateway` when needed.
+
+Every built image gets an immutable tag alongside `:latest`, so you can always roll back
+to a specific build. Images publish to `ghcr.io/<your-github-user-or-org>/<this-repo>/<connector>`
+automatically — nothing to edit, the workflows derive the path from the repo they run in.
+
+**One-time setup:** in your repo's Settings → Actions → General → Workflow permissions,
+check "Allow GitHub Actions to create and approve pull requests" — otherwise
+`check-upstream.yml` won't be able to open its PRs.
+
+## Adding a new connector
+
+1. New top-level folder (e.g. `metrics/`).
+2. `Dockerfile.gateway` in that folder, plus `UPSTREAM_REF` if it vendors someone else's
+   pinned code (skip it if, like `metrics/`, it only composes independently-versioned
+   off-the-shelf tools — see that folder's README for the reasoning).
+3. `.github/workflows/build-<name>.yml`, triggered on `paths` scoped to that folder's
+   files only, so it doesn't rebuild on unrelated changes.
+4. If it should track an upstream, add a second job to `check-upstream.yml`.
+5. A new public hostname and a matching access rule wherever you expose it, plus a new
+   connector configured in your MCP client with its own token.
+6. A `README.md` in the folder: what it wraps, its parameter table, a docker-compose
+   example, and any caveats specific to it.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

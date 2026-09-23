@@ -4,16 +4,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# mcp-proxy (sparfenyuk): łączy się jako klient do istniejącego serwera SSE
-# i wystawia go z powrotem po stdio.
+# mcp-proxy (sparfenyuk): connects as a client to an existing SSE-transport
+# MCP server and re-exposes it over stdio.
+#
+# Pinned mcp<2.0: mcp-proxy 0.12.0 imports request_ctx from
+# mcp.server.lowlevel.server, which the mcp SDK removed/relocated in its 2.x
+# releases. Without this pin the container ImportErrors on every start.
+# Re-check this pin whenever either package is bumped.
 RUN pip install --no-cache-dir "mcp<2.0" mcp-proxy
 
 COPY run-proxy.sh /app/run-proxy.sh
 RUN chmod +x /app/run-proxy.sh
 
 ENTRYPOINT []
-# supergateway: bierze to co /app/run-proxy.sh wystawia po stdio
-# (czyli Glances przez mcp-proxy) i wystawia to na zewnątrz jako
-# streamable-HTTP z własnym bearer tokenem - spójnie z connectorami
-# Docker i Files.
+# supergateway takes whatever /app/run-proxy.sh exposes over stdio (the
+# wrapped SSE server, via mcp-proxy) and re-exposes it as streamable-HTTP
+# with its own bearer token - consistent with the docker and files
+# connectors.
 CMD ["sh", "-c", "npx -y supergateway --stdio /app/run-proxy.sh --outputTransport streamableHttp --port 8000 --oauth2Bearer \"$MCP_BEARER_TOKEN\""]

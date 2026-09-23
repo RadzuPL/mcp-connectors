@@ -19,14 +19,18 @@ jobs:
           echo "ref=$(cat docker/UPSTREAM_REF)" >> "$GITHUB_OUTPUT"
           echo "tag=$(date -u +%Y-%m-%d)-$(cut -c1-7 docker/UPSTREAM_REF)" >> "$GITHUB_OUTPUT"
 
+      - id: image
+        run: echo "repo=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Buduje wprost z repo ckreilinga, na przypiętym commicie - bez ręcznego
-      # kopiowania jego Dockerfile'a, więc nie ma ryzyka rozjazdu kopii.
+      # Builds straight from the upstream repo at the pinned commit instead of
+      # vendoring a copy of its Dockerfile, so there's no risk of the copy
+      # drifting from the original.
       - name: Build pinned upstream
         uses: docker/build-push-action@v6
         with:
@@ -35,12 +39,12 @@ jobs:
           push: false
           load: true
 
-      - name: Build i publikuj gateway
+      - name: Build and push gateway
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile.gateway
           push: true
           tags: |
-            ghcr.io/radzupl/mcp-connectors/docker:latest
-            ghcr.io/radzupl/mcp-connectors/docker:${{ steps.pin.outputs.tag }}
+            ${{ steps.image.outputs.repo }}/docker:latest
+            ${{ steps.image.outputs.repo }}/docker:${{ steps.pin.outputs.tag }}

@@ -1,7 +1,7 @@
 name: check-upstream
 on:
   schedule:
-    - cron: '0 6 * * 1'   # co poniedziałek 06:00 UTC
+    - cron: '0 6 * * 1'   # every Monday at 06:00 UTC
   workflow_dispatch:
 
 jobs:
@@ -13,28 +13,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Sprawdź najnowszy commit ckreiling/mcp-server-docker
+      - name: Check latest ckreiling/mcp-server-docker commit
         id: latest
         run: |
           LATEST=$(git ls-remote https://github.com/ckreiling/mcp-server-docker.git HEAD | cut -f1)
           echo "sha=$LATEST" >> "$GITHUB_OUTPUT"
 
-      - name: Podmień UPSTREAM_REF jeśli inny
+      - name: Update UPSTREAM_REF if it changed
         run: |
           if [ "$(cat docker/UPSTREAM_REF)" != "${{ steps.latest.outputs.sha }}" ]; then
             echo "${{ steps.latest.outputs.sha }}" > docker/UPSTREAM_REF
           fi
 
-      - name: Otwórz PR (tylko jeśli jest zmiana)
+      - name: Open a PR (only if something changed)
         uses: peter-evans/create-pull-request@v7
         with:
           commit-message: "docker: bump upstream ref to ${{ steps.latest.outputs.sha }}"
-          title: "docker connector: nowy commit upstream (${{ steps.latest.outputs.sha }})"
+          title: "docker connector: new upstream commit (${{ steps.latest.outputs.sha }})"
           body: |
-            ckreiling/mcp-server-docker ma nowy commit na main.
-            Przejrzyj diff przed mergem: https://github.com/ckreiling/mcp-server-docker/commits/main
+            ckreiling/mcp-server-docker has a new commit on main.
+            Review the diff before merging: https://github.com/ckreiling/mcp-server-docker/commits/main
 
-            Merge tego PR-a odpala build-docker.yml i publikuje nowy obraz.
+            Merging this PR triggers build-docker.yml and publishes a new image.
           branch: bump/docker-upstream
           add-paths: docker/UPSTREAM_REF
 
@@ -46,27 +46,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Sprawdź najnowszą wersję npm
+      - name: Check latest npm version
         id: latest
         run: |
           LATEST=$(npm view @modelcontextprotocol/server-filesystem version)
           echo "ver=$LATEST" >> "$GITHUB_OUTPUT"
 
-      - name: Podmień UPSTREAM_REF jeśli inny
+      - name: Update UPSTREAM_REF if it changed
         run: |
           if [ "$(cat files/UPSTREAM_REF)" != "${{ steps.latest.outputs.ver }}" ]; then
             echo "${{ steps.latest.outputs.ver }}" > files/UPSTREAM_REF
           fi
 
-      - name: Otwórz PR (tylko jeśli jest zmiana)
+      - name: Open a PR (only if something changed)
         uses: peter-evans/create-pull-request@v7
         with:
           commit-message: "files: bump server-filesystem to ${{ steps.latest.outputs.ver }}"
-          title: "files connector: nowa wersja npm (${{ steps.latest.outputs.ver }})"
+          title: "files connector: new npm version (${{ steps.latest.outputs.ver }})"
           body: |
-            @modelcontextprotocol/server-filesystem ma nową wersję na npm.
+            @modelcontextprotocol/server-filesystem has a new version on npm.
             Changelog: https://github.com/modelcontextprotocol/servers/commits/main
 
-            Merge tego PR-a odpala build-files.yml i publikuje nowy obraz.
+            Merging this PR triggers build-files.yml and publishes a new image.
           branch: bump/files-upstream
           add-paths: files/UPSTREAM_REF

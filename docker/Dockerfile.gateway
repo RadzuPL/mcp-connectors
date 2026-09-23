@@ -1,6 +1,10 @@
+# Base image: the upstream server built from the pinned commit in UPSTREAM_REF
+# (see the "Build pinned upstream" step in build-docker.yml).
 FROM local/mcp-server-docker:pinned
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 ENTRYPOINT []
+# supergateway wraps the server's stdio interface and exposes it as
+# streamable-HTTP, gated by its own bearer token.
 CMD ["sh", "-c", "npx -y supergateway --stdio 'mcp-server-docker' --outputTransport streamableHttp --port 8000 --oauth2Bearer \"$MCP_BEARER_TOKEN\""]

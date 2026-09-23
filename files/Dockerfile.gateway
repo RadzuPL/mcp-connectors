@@ -1,4 +1,7 @@
 FROM node:20-slim
 ARG MCP_FS_VERSION
 RUN npm install -g @modelcontextprotocol/server-filesystem@${MCP_FS_VERSION} supergateway
+# supergateway wraps the server's stdio interface and exposes it as
+# streamable-HTTP, gated by its own bearer token. ALLOWED_DIRS controls which
+# path(s) inside the container the server can see.
 CMD ["sh", "-c", "npx -y supergateway --stdio \"mcp-server-filesystem $ALLOWED_DIRS\" --outputTransport streamableHttp --port 8000 --oauth2Bearer \"$MCP_BEARER_TOKEN\""]

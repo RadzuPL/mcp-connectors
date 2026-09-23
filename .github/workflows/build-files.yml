@@ -19,13 +19,16 @@ jobs:
           echo "ver=$(cat files/UPSTREAM_REF)" >> "$GITHUB_OUTPUT"
           echo "tag=$(date -u +%Y-%m-%d)-$(cat files/UPSTREAM_REF)" >> "$GITHUB_OUTPUT"
 
+      - id: image
+        run: echo "repo=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build i publikuj gateway
+      - name: Build and push gateway
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -34,5 +37,5 @@ jobs:
           build-args: |
             MCP_FS_VERSION=${{ steps.pin.outputs.ver }}
           tags: |
-            ghcr.io/radzupl/mcp-connectors/files:latest
-            ghcr.io/radzupl/mcp-connectors/files:${{ steps.pin.outputs.tag }}
+            ${{ steps.image.outputs.repo }}/files:latest
+            ${{ steps.image.outputs.repo }}/files:${{ steps.pin.outputs.tag }}
