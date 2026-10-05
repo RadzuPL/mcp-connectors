@@ -7,6 +7,18 @@ legacy transport — and re-expose it as an authenticated streamable-HTTP endpoi
 can be added as a custom connector in Claude or any other MCP client that speaks
 streamable-HTTP.
 
+> **Security notice (2026-10-05) — read before exposing anything.** The `docker/`,
+> `files/` and `metrics/` gateways start `supergateway` with
+> `--oauth2Bearer "$MCP_BEARER_TOKEN"`. In supergateway 4.1.0 that flag only *adds* an
+> `Authorization` header; it does **not** check the header of incoming requests.
+> Verified: gateways started this way answer `200` to a request with no token. Until
+> those three modules are fixed, treat them as **unauthenticated**: rely only on what
+> restricts access in front of them (tunnel rules, IP allow-lists), or stop them. The
+> `unifi/` module no longer uses that flag: it puts a small proxy
+> ([`unifi/auth-proxy.js`](unifi/auth-proxy.js), tested in CI before every build) in
+> front of `supergateway` that really checks the token. Test your own deployment: a
+> request without a token must return `401` (see [`unifi/README.md`](unifi/README.md#verify-your-deployment)).
+
 This repo grew out of connecting an AI agent to a single home server, but nothing in it
 is tied to that server. Every piece here — the gateway pattern, the read-only
 enforcement, the update automation — works the same on any Docker host you point it at.
@@ -35,6 +47,10 @@ MCP client (streamable-HTTP, bearer token)
    -> gateway container: supergateway (stdio -> streamable-HTTP, own bearer token)
        -> the wrapped MCP server (stdio)
 ```
+
+The diagram shows the intended design. See the security notice above: today only
+`unifi/` actually enforces the token, by putting an authenticating proxy between the
+client and `supergateway`.
 
 If the wrapped server only speaks the legacy SSE transport instead of stdio, add one
 more hop — a client-side bridge that connects to it and re-exposes it over stdio, so
@@ -70,8 +86,9 @@ its README for why that means no `UPSTREAM_REF` and no auto-bump job for it.
 
 ## Exposing a gateway container
 
-Each gateway listens on port 8000 inside its container and expects
-`Authorization: Bearer <MCP_BEARER_TOKEN>`. Getting HTTPS traffic to that port is
+Each gateway listens on port 8000 inside its container and is meant to expect
+`Authorization: Bearer <MCP_BEARER_TOKEN>` (today only `unifi/` actually does; see the
+security notice at the top). Getting HTTPS traffic to that port is
 outside the scope of this repo — put it behind whatever reverse proxy or tunnel you
 already use: Cloudflare Tunnel, Tailscale Funnel/Serve, nginx + Let's Encrypt, Caddy,
 anything that can terminate TLS and forward to a container. Point your MCP client at
@@ -125,6 +142,18 @@ albo mówiący starszym transportem — i wystawiają go na zewnątrz jako uwier
 endpoint streamable-HTTP, żeby dało się go dodać jako custom connector w Claude albo w
 dowolnym innym kliencie MCP, który mówi streamable-HTTP.
 
+> **Ostrzeżenie o bezpieczeństwie (2026-10-05) — przeczytaj, zanim cokolwiek wystawisz.**
+> Gatewaye `docker/`, `files/` i `metrics/` startują `supergateway` z
+> `--oauth2Bearer "$MCP_BEARER_TOKEN"`. W supergateway 4.1.0 ta flaga tylko *dodaje*
+> nagłówek `Authorization`; **nie** sprawdza nagłówka w żądaniach przychodzących.
+> Sprawdzone: bramki uruchomione w ten sposób odpowiadają `200` na żądanie bez tokenu.
+> Dopóki te trzy moduły nie zostaną naprawione, traktuj je jako **nieuwierzytelnione**:
+> polegaj wyłącznie na tym, co ogranicza dostęp przed nimi (reguły tunelu, listy IP),
+> albo je zatrzymaj. Moduł `unifi/` nie używa już tej flagi: przed `supergateway` stoi w
+> nim małe proxy ([`unifi/auth-proxy.js`](unifi/auth-proxy.js), testowane w CI przed
+> każdym buildem), które naprawdę sprawdza token. Przetestuj własny deployment: żądanie
+> bez tokenu musi zwrócić `401` (zobacz [`unifi/README.md`](unifi/README.md#sprawdź-swój-deployment)).
+
 To repo wzięło się z podłączania agenta AI do jednego konkretnego domowego serwera, ale
 nic tu nie jest do niego przywiązane. Każdy element — wzorzec gatewaya, wymuszanie trybu
 tylko-do-odczytu, automatyzacja aktualizacji — działa tak samo na dowolnym hoście
@@ -155,6 +184,10 @@ MCP client (streamable-HTTP, bearer token)
    -> gateway container: supergateway (stdio -> streamable-HTTP, own bearer token)
        -> the wrapped MCP server (stdio)
 ```
+
+Diagram pokazuje zamierzony projekt. Zobacz ostrzeżenie o bezpieczeństwie wyżej: dziś
+token faktycznie wymusza tylko `unifi/`, wstawiając proxy z uwierzytelnianiem między
+klienta a `supergateway`.
 
 Jeśli opakowywany serwer mówi tylko starym transportem SSE zamiast stdio, dochodzi jeden
 dodatkowy hop — most łączący się z nim jako klient i wystawiający go z powrotem po
@@ -190,8 +223,9 @@ README, dlaczego oznacza to brak `UPSTREAM_REF` i brak joba auto-bumpującego.
 
 ### Wystawianie kontenera gatewaya
 
-Każdy gateway nasłuchuje na porcie 8000 wewnątrz kontenera i oczekuje
-`Authorization: Bearer <MCP_BEARER_TOKEN>`. Doprowadzenie ruchu HTTPS do tego portu jest
+Każdy gateway nasłuchuje na porcie 8000 wewnątrz kontenera i ma oczekiwać
+`Authorization: Bearer <MCP_BEARER_TOKEN>` (dziś robi to naprawdę tylko `unifi/`; zobacz
+ostrzeżenie na górze). Doprowadzenie ruchu HTTPS do tego portu jest
 poza zakresem tego repo — postaw go za dowolnym reverse proxy albo tunelem, którego już
 używasz: Cloudflare Tunnel, Tailscale Funnel/Serve, nginx + Let's Encrypt, Caddy,
 cokolwiek, co potrafi terminować TLS i przekazać ruch do kontenera. Skieruj swojego

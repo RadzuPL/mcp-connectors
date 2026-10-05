@@ -3,7 +3,13 @@ on:
   workflow_dispatch:
   push:
     branches: [master]
-    paths: ['unifi/UPSTREAM_REF', 'unifi/Dockerfile.gateway', '.github/workflows/build-unifi.yml']
+    paths:
+      - 'unifi/UPSTREAM_REF'
+      - 'unifi/Dockerfile.gateway'
+      - 'unifi/auth-proxy.js'
+      - 'unifi/entrypoint.sh'
+      - 'unifi/test-proxy.js'
+      - '.github/workflows/build-unifi.yml'
 
 jobs:
   build:
@@ -13,6 +19,10 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      # The build stops here if the proxy no longer rejects unauthenticated requests.
+      - name: Test the authenticating proxy
+        run: node unifi/test-proxy.js
 
       - id: pin
         run: |

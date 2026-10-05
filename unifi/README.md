@@ -4,18 +4,36 @@
 
 Wraps [`unifi-network-mcp`](https://pypi.org/project/unifi-network-mcp/) (source:
 [`sirkirby/unifi-mcp`](https://github.com/sirkirby/unifi-mcp)), pinned to the PyPI
-version in [`UPSTREAM_REF`](UPSTREAM_REF), and adds
-[`supergateway`](https://github.com/supercorp-ai/supergateway) to expose it as
-streamable-HTTP behind a bearer token.
+version in [`UPSTREAM_REF`](UPSTREAM_REF), and exposes it as streamable-HTTP behind a
+bearer token that is actually checked.
 
-## Why stdio + supergateway, not the server's own HTTP mode
+## Authentication: why there is a proxy in this container
 
-Upstream documents its HTTP transport as unauthenticated and meant for trusted local
-clients, and says remote access needs an authenticated TLS proxy or its own Cloud
-Relay. This connector therefore runs the server over stdio (its default) and puts
-supergateway's bearer token in front, exactly like the other connectors here. As a side
-effect, upstream's own Host-header validation (`UNIFI_MCP_ALLOWED_HOSTS`) never comes
-into play.
+`supergateway` 4.1.0 has **no inbound authentication**. Its `--oauth2Bearer` flag only
+adds an `Authorization` header; it never checks the header of incoming requests.
+Verified on 2026-10-05: gateways started with `--oauth2Bearer "$MCP_BEARER_TOKEN"`
+answer `200` to a request with no token at all.
+
+So this image runs two processes:
+
+```
+MCP client (streamable-HTTP, Authorization: Bearer <token>)
+   -> auth-proxy.js on :8000   (checks the token, answers 401 otherwise)
+       -> supergateway on 127.0.0.1:8001   (stdio -> streamable-HTTP, no auth of its own)
+           -> unifi-network-mcp (stdio)
+```
+
+[`auth-proxy.js`](auth-proxy.js) is ~100 lines of plain Node (core modules only),
+compares the token in constant time, strips the `Authorization` header before
+forwarding, streams SSE responses through unchanged, and refuses to start if no token
+(or one shorter than 24 characters) is configured. [`entrypoint.sh`](entrypoint.sh)
+stops the whole container if either process dies, so a dead proxy can never leave an
+unauthenticated gateway behind. [`test-proxy.js`](test-proxy.js) runs in CI before every
+build; if it fails, no image is published.
+
+The server's own HTTP transport (unauthenticated upstream, meant for trusted local
+clients) is deliberately not enabled; upstream's Host-header validation never comes into
+play.
 
 ## Read-only: two layers, and neither is a substitute for checking
 
@@ -47,7 +65,9 @@ tools, which keeps the client's context small. No setting needed.
 | Variable | Set on | Required | Example | Notes |
 |---|---|---|---|---|
 | `UNIFI_MCP_VERSION` | build arg | yes | value of `UPSTREAM_REF` | pins the PyPI version at build time |
-| `MCP_BEARER_TOKEN` | `mcp-unifi-connector` | yes | a random 32+ char string | token your MCP client sends as `Authorization: Bearer ...` |
+| `MCP_BEARER_TOKEN_FILE` | `mcp-unifi-connector` | yes (or `MCP_BEARER_TOKEN`) | `/run/secrets/mcp_bearer_token` | file containing the token, at least 24 characters (`openssl rand -hex 32`). Preferred: the token stays out of `docker inspect` and out of the process list |
+| `MCP_BEARER_TOKEN` | `mcp-unifi-connector` | alternative to the file | a random 32+ char string | works, but the value is visible in `docker inspect` and in container templates (it is no longer in the process list) |
+| `MCP_ALLOW_PATH_TOKEN` | `mcp-unifi-connector` | no | `true` | also accepts the token as the first URL path segment (`https://<host>/<token>/mcp`), for clients that cannot send an `Authorization` header. Off by default, because URLs end up in logs |
 | `UNIFI_NETWORK_HOST` | `mcp-unifi-connector` | yes | `192.168.1.1` | controller IP or hostname; must be reachable from the container |
 | `UNIFI_NETWORK_USERNAME` | `mcp-unifi-connector` | yes | `claude-ro` | local, view-only account |
 | `UNIFI_NETWORK_PASSWORD_FILE` | `mcp-unifi-connector` | yes | `/run/secrets/unifi_password` | path to a file with the password; keeps it out of `docker inspect`. `UNIFI_NETWORK_PASSWORD` also works but is visible in the container's environment |
@@ -55,8 +75,8 @@ tools, which keeps the client's context small. No setting needed.
 | `UNIFI_POLICY_NETWORK_CREATE` / `_UPDATE` / `_DELETE` | `mcp-unifi-connector` | recommended | `false` | see above |
 | `UNIFI_NETWORK_SITE`, `UNIFI_NETWORK_PORT` | `mcp-unifi-connector` | no | `default`, `443` | only if yours differ |
 
-Note: the container runs as root, like the other connectors here, so a password file
-with mode `600` owned by root is readable. Mount it `:ro`.
+Note: the container runs as root, like the other connectors here, so secret files with
+mode `600` owned by root are readable. Mount them `:ro`.
 
 ## docker-compose example
 
@@ -70,7 +90,7 @@ services:
         UNIFI_MCP_VERSION: "0.36.2"   # keep in sync with UPSTREAM_REF
     # or: image: ghcr.io/<your-github-user>/<your-repo>/unifi:latest
     environment:
-      MCP_BEARER_TOKEN: ${MCP_UNIFI_BEARER_TOKEN}
+      MCP_BEARER_TOKEN_FILE: /run/secrets/mcp_bearer_token
       UNIFI_NETWORK_HOST: 192.168.1.1
       UNIFI_NETWORK_USERNAME: claude-ro
       UNIFI_NETWORK_PASSWORD_FILE: /run/secrets/unifi_password
@@ -79,6 +99,7 @@ services:
       UNIFI_POLICY_NETWORK_UPDATE: "false"
       UNIFI_POLICY_NETWORK_DELETE: "false"
     volumes:
+      - /path/on/host/bearer_token:/run/secrets/mcp_bearer_token:ro
       - /path/on/host/unifi_password:/run/secrets/unifi_password:ro
     networks: [mcp]
     restart: unless-stopped
@@ -89,7 +110,18 @@ networks:
 ```
 
 Expose port 8000 as described in the root README, and add it to your MCP client as
-`https://<your-host>/mcp` with `Authorization: Bearer <MCP_UNIFI_BEARER_TOKEN>`.
+`https://<your-host>/mcp` with `Authorization: Bearer <token>`.
+
+## Verify your deployment
+
+From a container on the same Docker network. Without a token the answer must be `401`;
+if you get `200`, the gateway is open.
+
+```bash
+docker run --rm --network mcp curlimages/curl -s -o /dev/null -w "%{http_code}\n" -X POST http://mcp-unifi-connector:8000/mcp -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}'
+```
+
+The same request with `-H "Authorization: Bearer <token>"` must return `200`.
 
 ## Updates
 
@@ -106,18 +138,36 @@ and only moves through a reviewed merge of the weekly PR from `check-upstream.ym
 
 Opakowuje [`unifi-network-mcp`](https://pypi.org/project/unifi-network-mcp/) (kod:
 [`sirkirby/unifi-mcp`](https://github.com/sirkirby/unifi-mcp)), przypięty do wersji z
-PyPI w [`UPSTREAM_REF`](UPSTREAM_REF), i dokleja
-[`supergateway`](https://github.com/supercorp-ai/supergateway), żeby wystawić go jako
-streamable-HTTP za tokenem Bearer.
+PyPI w [`UPSTREAM_REF`](UPSTREAM_REF), i wystawia go jako streamable-HTTP za tokenem
+Bearer, który jest naprawdę sprawdzany.
 
-### Dlaczego stdio + supergateway, a nie własny tryb HTTP serwera
+### Uwierzytelnianie: dlaczego w tym kontenerze jest proxy
 
-Upstream opisuje swój transport HTTP jako nieuwierzytelniony i przeznaczony dla
-zaufanych klientów lokalnych, a dostęp zdalny każe puszczać przez uwierzytelnione proxy
-z TLS albo przez własny Cloud Relay. Dlatego ten connector uruchamia serwer po stdio (to
-jego domyślny tryb) i stawia przed nim token supergateway, tak samo jak pozostałe
-connectory w tym repo. Skutek uboczny: własna walidacja nagłówka Host w trybie HTTP
-upstreamu (`UNIFI_MCP_ALLOWED_HOSTS`) w ogóle nie wchodzi w grę.
+`supergateway` 4.1.0 **nie ma uwierzytelniania żądań przychodzących**. Flaga
+`--oauth2Bearer` tylko dodaje nagłówek `Authorization`; nigdy nie sprawdza nagłówka w
+żądaniach przychodzących. Sprawdzone 2026-10-05: bramki uruchomione z
+`--oauth2Bearer "$MCP_BEARER_TOKEN"` odpowiadają `200` na żądanie bez żadnego tokenu.
+
+Dlatego ten obraz uruchamia dwa procesy:
+
+```
+MCP client (streamable-HTTP, Authorization: Bearer <token>)
+   -> auth-proxy.js na :8000   (sprawdza token, w przeciwnym razie odpowiada 401)
+       -> supergateway na 127.0.0.1:8001   (stdio -> streamable-HTTP, bez własnej autoryzacji)
+           -> unifi-network-mcp (stdio)
+```
+
+[`auth-proxy.js`](auth-proxy.js) to ok. 100 linii czystego Node (tylko moduły core),
+porównuje token w stałym czasie, usuwa nagłówek `Authorization` przed przekazaniem
+dalej, przepuszcza odpowiedzi SSE strumieniowo i odmawia startu, jeśli nie ma tokenu
+(albo jest krótszy niż 24 znaki). [`entrypoint.sh`](entrypoint.sh) zatrzymuje cały
+kontener, jeśli któryś z procesów padnie, więc martwe proxy nie zostawi nigdy
+nieuwierzytelnionej bramki. [`test-proxy.js`](test-proxy.js) odpala się w CI przed każdym
+buildem; jeśli padnie, żaden obraz się nie publikuje.
+
+Własny transport HTTP serwera (nieuwierzytelniony w upstreamie, przeznaczony dla
+zaufanych klientów lokalnych) jest celowo wyłączony; własna walidacja nagłówka Host
+upstreamu nie wchodzi w grę.
 
 ### Tylko odczyt: dwie warstwy, i żadna nie zwalnia ze sprawdzenia
 
@@ -148,7 +198,9 @@ Network, co oszczędza kontekst klienta. Nic nie trzeba ustawiać.
 | Zmienna | Ustawiana na | Wymagana | Przykład | Uwagi |
 |---|---|---|---|---|
 | `UNIFI_MCP_VERSION` | build arg | tak | wartość `UPSTREAM_REF` | przypina wersję z PyPI w czasie builda |
-| `MCP_BEARER_TOKEN` | `mcp-unifi-connector` | tak | losowy string 32+ znaków | token, który twój klient MCP wysyła jako `Authorization: Bearer ...` |
+| `MCP_BEARER_TOKEN_FILE` | `mcp-unifi-connector` | tak (albo `MCP_BEARER_TOKEN`) | `/run/secrets/mcp_bearer_token` | plik z tokenem, minimum 24 znaki (`openssl rand -hex 32`). Zalecane: token nie jest widoczny w `docker inspect` ani na liście procesów |
+| `MCP_BEARER_TOKEN` | `mcp-unifi-connector` | alternatywa dla pliku | losowy string 32+ znaków | działa, ale wartość jest widoczna w `docker inspect` i w szablonach kontenerów (nie ma jej już na liście procesów) |
+| `MCP_ALLOW_PATH_TOKEN` | `mcp-unifi-connector` | nie | `true` | przyjmuje też token jako pierwszy segment ścieżki (`https://<host>/<token>/mcp`), dla klientów, które nie potrafią wysłać nagłówka `Authorization`. Domyślnie wyłączone, bo adresy URL trafiają do logów |
 | `UNIFI_NETWORK_HOST` | `mcp-unifi-connector` | tak | `192.168.1.1` | IP lub nazwa kontrolera; musi być osiągalny z kontenera |
 | `UNIFI_NETWORK_USERNAME` | `mcp-unifi-connector` | tak | `claude-ro` | lokalne konto tylko do podglądu |
 | `UNIFI_NETWORK_PASSWORD_FILE` | `mcp-unifi-connector` | tak | `/run/secrets/unifi_password` | ścieżka do pliku z hasłem; hasło nie jest widoczne w `docker inspect`. `UNIFI_NETWORK_PASSWORD` też działa, ale jest widoczne w środowisku kontenera |
@@ -156,8 +208,8 @@ Network, co oszczędza kontekst klienta. Nic nie trzeba ustawiać.
 | `UNIFI_POLICY_NETWORK_CREATE` / `_UPDATE` / `_DELETE` | `mcp-unifi-connector` | zalecane | `false` | patrz wyżej |
 | `UNIFI_NETWORK_SITE`, `UNIFI_NETWORK_PORT` | `mcp-unifi-connector` | nie | `default`, `443` | tylko jeśli twoje są inne |
 
-Uwaga: kontener działa jako root, tak jak pozostałe connectory w tym repo, więc plik z
-hasłem z trybem `600` należący do roota da się odczytać. Montuj go jako `:ro`.
+Uwaga: kontener działa jako root, tak jak pozostałe connectory w tym repo, więc pliki z
+sekretami z trybem `600` należące do roota da się odczytać. Montuj je jako `:ro`.
 
 ### Przykład docker-compose
 
@@ -171,7 +223,7 @@ services:
         UNIFI_MCP_VERSION: "0.36.2"   # keep in sync with UPSTREAM_REF
     # or: image: ghcr.io/<your-github-user>/<your-repo>/unifi:latest
     environment:
-      MCP_BEARER_TOKEN: ${MCP_UNIFI_BEARER_TOKEN}
+      MCP_BEARER_TOKEN_FILE: /run/secrets/mcp_bearer_token
       UNIFI_NETWORK_HOST: 192.168.1.1
       UNIFI_NETWORK_USERNAME: claude-ro
       UNIFI_NETWORK_PASSWORD_FILE: /run/secrets/unifi_password
@@ -180,6 +232,7 @@ services:
       UNIFI_POLICY_NETWORK_UPDATE: "false"
       UNIFI_POLICY_NETWORK_DELETE: "false"
     volumes:
+      - /path/on/host/bearer_token:/run/secrets/mcp_bearer_token:ro
       - /path/on/host/unifi_password:/run/secrets/unifi_password:ro
     networks: [mcp]
     restart: unless-stopped
@@ -190,7 +243,18 @@ networks:
 ```
 
 Wystaw port 8000 w sposób opisany w głównym README, i dodaj go do swojego klienta MCP
-jako `https://<twój-host>/mcp` z `Authorization: Bearer <MCP_UNIFI_BEARER_TOKEN>`.
+jako `https://<twój-host>/mcp` z `Authorization: Bearer <token>`.
+
+### Sprawdź swój deployment
+
+Z kontenera w tej samej sieci Dockera. Bez tokenu odpowiedź musi brzmieć `401`; jeśli
+dostaniesz `200`, bramka jest otwarta.
+
+```bash
+docker run --rm --network mcp curlimages/curl -s -o /dev/null -w "%{http_code}\n" -X POST http://mcp-unifi-connector:8000/mcp -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}'
+```
+
+To samo żądanie z `-H "Authorization: Bearer <token>"` musi zwrócić `200`.
 
 ### Aktualizacje
 

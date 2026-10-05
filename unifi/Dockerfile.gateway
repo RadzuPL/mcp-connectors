@@ -16,7 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir "unifi-network-mcp==${UNIFI_MCP_VERSION}" \
     && npm install -g supergateway
 
-# supergateway wraps the server's stdio interface and exposes it as
-# streamable-HTTP, gated by its own bearer token. The server's own HTTP
-# transport (unauthenticated upstream) is deliberately NOT enabled.
-CMD ["sh", "-c", "supergateway --stdio 'unifi-network-mcp' --outputTransport streamableHttp --port 8000 --oauth2Bearer \"$MCP_BEARER_TOKEN\""]
+# supergateway (4.1.0) has NO inbound authentication: its --oauth2Bearer flag only
+# adds an Authorization header and never checks incoming requests. auth-proxy.js is
+# what actually checks the token; entrypoint.sh runs supergateway on loopback and the
+# proxy on :8000 in front of it. The server's own HTTP transport is not enabled.
+COPY auth-proxy.js entrypoint.sh /app/
+RUN chmod +x /app/entrypoint.sh
+
+EXPOSE 8000
+CMD ["/app/entrypoint.sh"]
