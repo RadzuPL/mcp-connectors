@@ -19,9 +19,11 @@ more than it was built for, and that boundary is enforced **below** the MCP serv
 itself, not by trusting the server's own flags or the model's good behavior:
 
 - a proxy in front of a socket/API that hard-blocks mutating calls (`POST=0` on
-  `docker-socket-proxy`, in the `docker/` example), or
+  `docker-socket-proxy`, in the `docker/` example),
 - a `:ro` bind mount so a filesystem server has nothing to write to, even if its own
-  code has a write tool (the `files/` example).
+  code has a write tool (the `files/` example), or
+- a credential that can only read, issued by the system being wrapped (the `unifi/`
+  example: a view-only local account on the controller).
 
 This is defense in depth: even if a given MCP server had a bug, or a malicious change
 landed in its code, the layer underneath would still stop it.
@@ -52,7 +54,7 @@ credentials the gateway itself needs to reach the wrapped server.
 
 ## Connectors in this repo
 
-Three example connectors are included, each wrapping a different real MCP server. Full
+Four connectors are included, each wrapping a different real MCP server. Full
 parameter tables and docker-compose examples live in each connector's own README.
 
 | Connector | Folder | Wraps | Read-only enforced by |
@@ -60,9 +62,10 @@ parameter tables and docker-compose examples live in each connector's own README
 | docker | [`docker/`](docker/README.md) | [`ckreiling/mcp-server-docker`](https://github.com/ckreiling/mcp-server-docker), pinned to a commit | `docker-socket-proxy` in front of it (`POST=0`) |
 | files | [`files/`](files/README.md) | the official [`@modelcontextprotocol/server-filesystem`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | `:ro` bind mounts (swap for `:rw` deliberately, per folder, if you want write access) |
 | metrics | [`metrics/`](metrics/README.md) | an SSE-only MCP server (built against [Glances](https://nicolargo.github.io/glances/)) via an `mcp-proxy` + `supergateway` chain | nothing to enforce — the wrapped server only exposes read-only resources and prompts, no tools |
+| unifi | [`unifi/`](unifi/README.md) | [`unifi-network-mcp`](https://pypi.org/project/unifi-network-mcp/) from PyPI, pinned to a version, over stdio | a view-only local account on the UniFi controller, with the server's own `UNIFI_POLICY_NETWORK_*` gates as a second line |
 
 `metrics/` is the odd one out on purpose: it doesn't vendor a single pinned upstream
-like the other two, it composes two independently-versioned off-the-shelf tools. See
+like the other three, it composes two independently-versioned off-the-shelf tools. See
 its README for why that means no `UPSTREAM_REF` and no auto-bump job for it.
 
 ## Exposing a gateway container
@@ -82,9 +85,9 @@ in Glances that breaks any reverse-proxied deployment on the default HTTPS port.
 ## Semi-automatic upstream updates
 
 Connectors that vendor someone else's code (`ckreiling/mcp-server-docker`, the official
-`@modelcontextprotocol/server-filesystem`) pin the version they build in an
-`UPSTREAM_REF` file in their folder, instead of tracking `main`/`latest` live. That
-version only changes through a deliberate, reviewed merge.
+`@modelcontextprotocol/server-filesystem`, `unifi-network-mcp` from PyPI) pin the version
+they build in an `UPSTREAM_REF` file in their folder, instead of tracking
+`main`/`latest` live. That version only changes through a deliberate, reviewed merge.
 
 `check-upstream.yml` runs weekly, checks whether the upstream has something newer, and
 if so opens a pull request bumping `UPSTREAM_REF` on its own. Nothing builds or
@@ -136,9 +139,11 @@ może zrobić więcej niż to, do czego został zbudowany, a ta granica jest wym
 zachowania modelu:
 
 - proxy przed socketem/API, które twardo blokuje wywołania mutujące (`POST=0` na
-  `docker-socket-proxy`, w przykładzie `docker/`), albo
+  `docker-socket-proxy`, w przykładzie `docker/`),
 - mount `:ro`, dzięki któremu serwer plikowy fizycznie nie ma na czym zapisać, nawet
-  jeśli jego własny kod ma narzędzie do zapisu (przykład `files/`).
+  jeśli jego własny kod ma narzędzie do zapisu (przykład `files/`), albo
+- poświadczenie, które potrafi tylko czytać, wystawione przez opakowywany system
+  (przykład `unifi/`: lokalne konto tylko do podglądu na kontrolerze).
 
 To defense in depth: nawet gdyby dany serwer MCP miał błąd, albo trafiła do niego
 złośliwa zmiana w kodzie, warstwa niżej i tak by to zablokowała.
@@ -169,17 +174,18 @@ sam gateway potrzebuje, żeby dostać się do opakowywanego serwera.
 
 ### Connectory w tym repo
 
-W repo są trzy przykładowe connectory, każdy opakowuje inny, prawdziwy serwer MCP. Pełne
-tabele parametrów i przykłady docker-compose są w README każdego connectora.
+W repo są cztery connectory, każdy opakowuje inny, prawdziwy serwer MCP. Pełne tabele
+parametrów i przykłady docker-compose są w README każdego connectora.
 
 | Connector | Folder | Opakowuje | Tryb tylko-do-odczytu wymuszony przez |
 |---|---|---|---|
 | docker | [`docker/`](docker/README.md) | [`ckreiling/mcp-server-docker`](https://github.com/ckreiling/mcp-server-docker), przypięty do commita | `docker-socket-proxy` przed nim (`POST=0`) |
 | files | [`files/`](files/README.md) | oficjalny [`@modelcontextprotocol/server-filesystem`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | mounty `:ro` (świadomie zamieniane na `:rw` per folder, jeśli chcesz dostęp do zapisu) |
 | metrics | [`metrics/`](metrics/README.md) | serwer MCP tylko-SSE (zbudowany i przetestowany na [Glances](https://nicolargo.github.io/glances/)) przez łańcuch `mcp-proxy` + `supergateway` | nie ma czego wymuszać — opakowywany serwer wystawia tylko zasoby (resources) i prompty do odczytu, zero narzędzi (tools) |
+| unifi | [`unifi/`](unifi/README.md) | [`unifi-network-mcp`](https://pypi.org/project/unifi-network-mcp/) z PyPI, przypięty do wersji, po stdio | lokalne konto tylko do podglądu na kontrolerze UniFi, a własne bramki `UNIFI_POLICY_NETWORK_*` serwera jako druga linia |
 
 `metrics/` jest wyjątkiem celowo: nie opakowuje jednego przypiętego upstreamu jak
-pozostałe dwa, tylko składa dwa niezależnie wersjonowane, gotowe narzędzia. Zobacz jego
+pozostałe trzy, tylko składa dwa niezależnie wersjonowane, gotowe narzędzia. Zobacz jego
 README, dlaczego oznacza to brak `UPSTREAM_REF` i brak joba auto-bumpującego.
 
 ### Wystawianie kontenera gatewaya
@@ -199,9 +205,9 @@ Glances, który psuje każdy deployment za reverse proxy na domyślnym porcie HT
 ### Pół-automatyczne aktualizacje upstreamu
 
 Connectory, które opakowują cudzy kod (`ckreiling/mcp-server-docker`, oficjalny
-`@modelcontextprotocol/server-filesystem`), przypinają budowaną wersję w pliku
-`UPSTREAM_REF` w swoim folderze, zamiast śledzić `main`/`latest` na żywo. Ta wersja
-zmienia się tylko przez świadomy, przejrzany merge.
+`@modelcontextprotocol/server-filesystem`, `unifi-network-mcp` z PyPI), przypinają
+budowaną wersję w pliku `UPSTREAM_REF` w swoim folderze, zamiast śledzić `main`/`latest`
+na żywo. Ta wersja zmienia się tylko przez świadomy, przejrzany merge.
 
 `check-upstream.yml` odpala się co tydzień, sprawdza czy upstream ma coś nowszego, i
 jeśli tak — sam otwiera Pull Requesta z bumpem `UPSTREAM_REF`. Nic się nie buduje ani nie

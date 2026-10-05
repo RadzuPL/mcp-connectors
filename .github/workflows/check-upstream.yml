@@ -70,3 +70,41 @@ jobs:
             Merging this PR triggers build-files.yml and publishes a new image.
           branch: bump/files-upstream
           add-paths: files/UPSTREAM_REF
+
+  check-unifi:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check latest unifi-network-mcp version on PyPI
+        id: latest
+        run: |
+          LATEST=$(curl -fsS https://pypi.org/pypi/unifi-network-mcp/json | jq -r .info.version)
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Could not read the latest version from PyPI" >&2
+            exit 1
+          fi
+          echo "ver=$LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Update UPSTREAM_REF if it changed
+        run: |
+          if [ "$(cat unifi/UPSTREAM_REF)" != "${{ steps.latest.outputs.ver }}" ]; then
+            echo "${{ steps.latest.outputs.ver }}" > unifi/UPSTREAM_REF
+          fi
+
+      - name: Open a PR (only if something changed)
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "unifi: bump unifi-network-mcp to ${{ steps.latest.outputs.ver }}"
+          title: "unifi connector: new PyPI version (${{ steps.latest.outputs.ver }})"
+          body: |
+            unifi-network-mcp has a new version on PyPI. New releases appear several times a week.
+            Release history: https://pypi.org/project/unifi-network-mcp/#history
+            Changes: https://github.com/sirkirby/unifi-mcp/commits/main
+
+            Merging this PR triggers build-unifi.yml and publishes a new image.
+          branch: bump/unifi-upstream
+          add-paths: unifi/UPSTREAM_REF
