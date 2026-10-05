@@ -19,8 +19,10 @@ RUN pip install --no-cache-dir "unifi-network-mcp==${UNIFI_MCP_VERSION}" \
 # supergateway (4.1.0) has NO inbound authentication: its --oauth2Bearer flag only
 # adds an Authorization header and never checks incoming requests. auth-proxy.js is
 # what actually checks the token; entrypoint.sh runs supergateway on loopback and the
-# proxy on :8000 in front of it. The server's own HTTP transport is not enabled.
-COPY auth-proxy.js entrypoint.sh /app/
+# proxy on :8000 in front of it. 4.1.0 also has no --host flag, so force-loopback.js
+# pins its port to 127.0.0.1 (otherwise other containers on the network could reach it
+# directly). The server's own HTTP transport is not enabled.
+COPY auth-proxy.js force-loopback.js entrypoint.sh /app/
 RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8000

@@ -7,8 +7,10 @@ on:
       - 'unifi/UPSTREAM_REF'
       - 'unifi/Dockerfile.gateway'
       - 'unifi/auth-proxy.js'
+      - 'unifi/force-loopback.js'
       - 'unifi/entrypoint.sh'
       - 'unifi/test-proxy.js'
+      - 'unifi/test-loopback.js'
       - '.github/workflows/build-unifi.yml'
 
 jobs:
@@ -23,6 +25,10 @@ jobs:
       # The build stops here if the proxy no longer rejects unauthenticated requests.
       - name: Test the authenticating proxy
         run: node unifi/test-proxy.js
+
+      # ...or if supergateway's own port is no longer kept off the container network.
+      - name: Test that supergateway's port is pinned to loopback
+        run: node unifi/test-loopback.js
 
       - id: pin
         run: |

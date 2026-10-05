@@ -8,20 +8,23 @@ set -u
 APP_DIR="${APP_DIR:-/app}"
 SG_PORT="${UPSTREAM_PORT:-8001}"
 
-# Bind supergateway to loopback when this version supports --host. If it does
-# not, say so loudly: the proxy still enforces the token on :8000, but the
-# gateway's own port would be reachable from other containers on the network.
+# Keep supergateway's own port off the container network. Newer versions have
+# --host; supergateway 4.1.0 does not and listens on every interface, so other
+# containers on the same Docker network could skip the proxy. In that case a
+# small preload pins the port to 127.0.0.1 (see force-loopback.js).
 HOST_ARGS=()
+SG_ENV=()
 if supergateway --help 2>&1 | grep -q -- '--host'; then
   HOST_ARGS=(--host 127.0.0.1)
 else
-  echo "entrypoint: WARNING: this supergateway has no --host flag; port ${SG_PORT} is not bound to loopback" >&2
+  echo "entrypoint: supergateway has no --host flag; pinning port ${SG_PORT} to 127.0.0.1 with force-loopback.js" >&2
+  SG_ENV=("NODE_OPTIONS=--require ${APP_DIR}/force-loopback.js" "FORCE_LOOPBACK_PORT=${SG_PORT}")
 fi
 
 node "${APP_DIR}/auth-proxy.js" &
 PROXY_PID=$!
 
-supergateway --stdio 'unifi-network-mcp' --outputTransport streamableHttp \
+env ${SG_ENV[@]+"${SG_ENV[@]}"} supergateway --stdio 'unifi-network-mcp' --outputTransport streamableHttp \
   ${HOST_ARGS[@]+"${HOST_ARGS[@]}"} --port "${SG_PORT}" &
 GATEWAY_PID=$!
 
