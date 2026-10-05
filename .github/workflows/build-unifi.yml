@@ -6,11 +6,7 @@ on:
     paths:
       - 'unifi/UPSTREAM_REF'
       - 'unifi/Dockerfile.gateway'
-      - 'unifi/auth-proxy.js'
-      - 'unifi/force-loopback.js'
-      - 'unifi/entrypoint.sh'
-      - 'unifi/test-proxy.js'
-      - 'unifi/test-loopback.js'
+      - 'gateway/**'
       - '.github/workflows/build-unifi.yml'
 
 jobs:
@@ -22,13 +18,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The build stops here if the proxy no longer rejects unauthenticated requests.
+      # The build stops here if the shared front end stops enforcing the token.
       - name: Test the authenticating proxy
-        run: node unifi/test-proxy.js
+        run: node gateway/test-proxy.js
 
-      # ...or if supergateway's own port is no longer kept off the container network.
       - name: Test that supergateway's port is pinned to loopback
-        run: node unifi/test-loopback.js
+        run: node gateway/test-loopback.js
+
+      - name: Test the entrypoint
+        run: bash gateway/test-entrypoint.sh
 
       - id: pin
         run: |
@@ -47,8 +45,8 @@ jobs:
       - name: Build and push gateway
         uses: docker/build-push-action@v6
         with:
-          context: ./unifi
-          file: ./unifi/Dockerfile.gateway
+          context: .
+          file: unifi/Dockerfile.gateway
           push: true
           build-args: |
             UNIFI_MCP_VERSION=${{ steps.pin.outputs.ver }}

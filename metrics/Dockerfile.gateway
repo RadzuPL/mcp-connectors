@@ -1,7 +1,15 @@
+# supergateway 4.1.0 needs Node >= 20, but Debian 12 (python:3.12-slim) only has Node 18 in
+# apt, so Node and supergateway come from the official node image instead.
+ARG SUPERGATEWAY_VERSION=4.1.0
+
+FROM node:22-slim AS supergateway
+ARG SUPERGATEWAY_VERSION
+RUN npm install -g "supergateway@${SUPERGATEWAY_VERSION}"
+
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    nodejs npm ca-certificates \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # mcp-proxy (sparfenyuk): connects as a client to an existing SSE-transport
@@ -13,12 +21,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Re-check this pin whenever either package is bumped.
 RUN pip install --no-cache-dir "mcp<2.0" mcp-proxy
 
-COPY run-proxy.sh /app/run-proxy.sh
+COPY --from=supergateway /usr/local/bin/node /usr/local/bin/node
+COPY --from=supergateway /usr/local/lib/node_modules/supergateway /usr/local/lib/node_modules/supergateway
+# The last two commands fail the build if Node does not run here or supergateway cannot start.
+RUN ln -s /usr/local/lib/node_modules/supergateway/dist/index.js /usr/local/bin/supergateway \
+    && chmod +x /usr/local/lib/node_modules/supergateway/dist/index.js \
+    && node --version \
+    && supergateway --help > /dev/null
+
+COPY metrics/run-proxy.sh /app/run-proxy.sh
 RUN chmod +x /app/run-proxy.sh
 
+# Shared authenticating front end (see gateway/README.md). Build context = repository root.
+# supergateway takes whatever /app/run-proxy.sh exposes over stdio (the wrapped SSE
+# server, via mcp-proxy) and re-exposes it as streamable-HTTP behind the token check.
+COPY gateway/ /app/gateway/
+RUN chmod +x /app/gateway/entrypoint.sh
+
+ENV GATEWAY_STDIO_CMD="/app/run-proxy.sh" \
+    GATEWAY_STATEFUL="false"
+
 ENTRYPOINT []
-# supergateway takes whatever /app/run-proxy.sh exposes over stdio (the
-# wrapped SSE server, via mcp-proxy) and re-exposes it as streamable-HTTP
-# with its own bearer token - consistent with the docker and files
-# connectors.
-CMD ["sh", "-c", "npx -y supergateway --stdio /app/run-proxy.sh --outputTransport streamableHttp --port 8000 --oauth2Bearer \"$MCP_BEARER_TOKEN\""]
+CMD ["/app/gateway/entrypoint.sh"]

@@ -6,24 +6,30 @@ LABEL org.opencontainers.image.source="https://github.com/RadzuPL/mcp-connectors
 # Pinned PyPI version of unifi-network-mcp, taken from UPSTREAM_REF by build-unifi.yml.
 # (The package requires Python >= 3.13.)
 ARG UNIFI_MCP_VERSION
+# supergateway 4.1.0 needs Node >= 20; python:3.13-slim is Debian 13, whose nodejs is 20.x.
+ARG SUPERGATEWAY_VERSION=4.1.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nodejs npm ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # supergateway is installed at build time instead of via `npx -y` on every start,
-# so starting the container does not depend on the npm registry.
+# so starting the container does not depend on the npm registry. The last two commands
+# fail the build if Node is too old or supergateway cannot start.
 RUN pip install --no-cache-dir "unifi-network-mcp==${UNIFI_MCP_VERSION}" \
-    && npm install -g supergateway
+    && npm install -g "supergateway@${SUPERGATEWAY_VERSION}" \
+    && node -e "if (parseInt(process.versions.node, 10) < 20) { console.error('Node >= 20 required, got ' + process.version); process.exit(1); }" \
+    && supergateway --help > /dev/null
 
-# supergateway (4.1.0) has NO inbound authentication: its --oauth2Bearer flag only
-# adds an Authorization header and never checks incoming requests. auth-proxy.js is
-# what actually checks the token; entrypoint.sh runs supergateway on loopback and the
-# proxy on :8000 in front of it. 4.1.0 also has no --host flag, so force-loopback.js
-# pins its port to 127.0.0.1 (otherwise other containers on the network could reach it
-# directly). The server's own HTTP transport is not enabled.
-COPY auth-proxy.js force-loopback.js entrypoint.sh /app/
-RUN chmod +x /app/entrypoint.sh
+# Shared authenticating front end (see gateway/README.md). Build context = repository root.
+COPY gateway/ /app/gateway/
+RUN chmod +x /app/gateway/entrypoint.sh
+
+# unifi-network-mcp logs in to the controller every time it starts, and UniFi OS rate-limits
+# logins, so it must run once per client session (stateful), not once per request.
+ENV GATEWAY_STDIO_CMD="unifi-network-mcp" \
+    GATEWAY_STATEFUL="true"
 
 EXPOSE 8000
-CMD ["/app/entrypoint.sh"]
+ENTRYPOINT []
+CMD ["/app/gateway/entrypoint.sh"]

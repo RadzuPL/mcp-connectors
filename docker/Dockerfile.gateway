@@ -1,10 +1,30 @@
+# supergateway 4.1.0 needs Node >= 20, and the base image's apt nodejs may be older, so
+# Node and supergateway come from the official node image instead of apt.
+ARG SUPERGATEWAY_VERSION=4.1.0
+
+FROM node:22-slim AS supergateway
+ARG SUPERGATEWAY_VERSION
+RUN npm install -g "supergateway@${SUPERGATEWAY_VERSION}"
+
 # Base image: the upstream server built from the pinned commit in UPSTREAM_REF
 # (see the "Build pinned upstream" step in build-docker.yml).
 FROM local/mcp-server-docker:pinned
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends nodejs npm \
-    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=supergateway /usr/local/bin/node /usr/local/bin/node
+COPY --from=supergateway /usr/local/lib/node_modules/supergateway /usr/local/lib/node_modules/supergateway
+# The last two commands fail the build if Node does not run here or supergateway cannot start.
+RUN ln -s /usr/local/lib/node_modules/supergateway/dist/index.js /usr/local/bin/supergateway \
+    && chmod +x /usr/local/lib/node_modules/supergateway/dist/index.js \
+    && node --version \
+    && supergateway --help > /dev/null
+
+# Shared authenticating front end (see gateway/README.md). Build context = repository root.
+COPY gateway/ /app/gateway/
+RUN chmod +x /app/gateway/entrypoint.sh
+
+ENV GATEWAY_STDIO_CMD="mcp-server-docker" \
+    GATEWAY_STATEFUL="false"
+
 ENTRYPOINT []
-# supergateway wraps the server's stdio interface and exposes it as
-# streamable-HTTP, gated by its own bearer token.
-CMD ["sh", "-c", "npx -y supergateway --stdio 'mcp-server-docker' --outputTransport streamableHttp --port 8000 --oauth2Bearer \"$MCP_BEARER_TOKEN\""]
+CMD ["/app/gateway/entrypoint.sh"]

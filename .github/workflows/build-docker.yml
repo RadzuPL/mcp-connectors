@@ -3,7 +3,11 @@ on:
   workflow_dispatch:
   push:
     branches: [master]
-    paths: ['docker/UPSTREAM_REF', 'docker/Dockerfile.gateway', '.github/workflows/build-docker.yml']
+    paths:
+      - 'docker/UPSTREAM_REF'
+      - 'docker/Dockerfile.gateway'
+      - 'gateway/**'
+      - '.github/workflows/build-docker.yml'
 
 jobs:
   build:
@@ -13,6 +17,16 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      # The build stops here if the shared front end stops enforcing the token.
+      - name: Test the authenticating proxy
+        run: node gateway/test-proxy.js
+
+      - name: Test that supergateway's port is pinned to loopback
+        run: node gateway/test-loopback.js
+
+      - name: Test the entrypoint
+        run: bash gateway/test-entrypoint.sh
 
       - id: pin
         run: |

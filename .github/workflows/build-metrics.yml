@@ -2,7 +2,12 @@ name: build-metrics-connector
 on:
   workflow_dispatch:
   push:
-    paths: ['metrics/Dockerfile.gateway', 'metrics/run-proxy.sh', '.github/workflows/build-metrics.yml']
+    branches: [master]
+    paths:
+      - 'metrics/Dockerfile.gateway'
+      - 'metrics/run-proxy.sh'
+      - 'gateway/**'
+      - '.github/workflows/build-metrics.yml'
 
 jobs:
   build:
@@ -12,6 +17,16 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      # The build stops here if the shared front end stops enforcing the token.
+      - name: Test the authenticating proxy
+        run: node gateway/test-proxy.js
+
+      - name: Test that supergateway's port is pinned to loopback
+        run: node gateway/test-loopback.js
+
+      - name: Test the entrypoint
+        run: bash gateway/test-entrypoint.sh
 
       - id: image
         run: echo "repo=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
@@ -25,8 +40,8 @@ jobs:
       - name: Build and push gateway
         uses: docker/build-push-action@v6
         with:
-          context: ./metrics
-          file: ./metrics/Dockerfile.gateway
+          context: .
+          file: metrics/Dockerfile.gateway
           push: true
           tags: |
             ${{ steps.image.outputs.repo }}/metrics:latest
