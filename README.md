@@ -7,17 +7,15 @@ legacy transport — and re-expose it as an authenticated streamable-HTTP endpoi
 can be added as a custom connector in Claude or any other MCP client that speaks
 streamable-HTTP.
 
-> **Security notice (2026-10-05) — read before exposing anything.** The `docker/`,
-> `files/` and `metrics/` gateways start `supergateway` with
-> `--oauth2Bearer "$MCP_BEARER_TOKEN"`. In supergateway 4.1.0 that flag only *adds* an
-> `Authorization` header; it does **not** check the header of incoming requests.
-> Verified: gateways started this way answer `200` to a request with no token. Until
-> those three modules are fixed, treat them as **unauthenticated**: rely only on what
-> restricts access in front of them (tunnel rules, IP allow-lists), or stop them. The
-> `unifi/` module no longer uses that flag: it puts a small proxy
-> ([`unifi/auth-proxy.js`](unifi/auth-proxy.js), tested in CI before every build) in
-> front of `supergateway` that really checks the token. Test your own deployment: a
-> request without a token must return `401` (see [`unifi/README.md`](unifi/README.md#verify-your-deployment)).
+> **Security notice (2026-10-05) — read before exposing anything.** Until this date every
+> gateway in this repo started `supergateway` with `--oauth2Bearer "$MCP_BEARER_TOKEN"`.
+> In supergateway 4.1.0 that flag only *adds* an `Authorization` header; it does **not**
+> check the header of incoming requests, so images built before 2026-10-05 answered `200`
+> to a request with no token. All four modules now put a small authenticating proxy
+> ([`gateway/auth-proxy.js`](gateway/auth-proxy.js), tested in CI before every build) in
+> front of `supergateway`. **Rebuild, redeploy, then verify**: a request without a token
+> must return `401` (see [`gateway/README.md`](gateway/README.md#verify-your-deployment)).
+> If you copied the old pattern, treat your gateways as unauthenticated until you have.
 
 This repo grew out of connecting an AI agent to a single home server, but nothing in it
 is tied to that server. Every piece here — the gateway pattern, the read-only
@@ -48,9 +46,9 @@ MCP client (streamable-HTTP, bearer token)
        -> the wrapped MCP server (stdio)
 ```
 
-The diagram shows the intended design. See the security notice above: today only
-`unifi/` actually enforces the token, by putting an authenticating proxy between the
-client and `supergateway`.
+Between the client and `supergateway` sits the authenticating proxy from
+[`gateway/`](gateway/README.md): `supergateway` has no inbound authentication of its own,
+so the proxy is what checks the token.
 
 If the wrapped server only speaks the legacy SSE transport instead of stdio, add one
 more hop — a client-side bridge that connects to it and re-exposes it over stdio, so
@@ -71,7 +69,8 @@ credentials the gateway itself needs to reach the wrapped server.
 ## Connectors in this repo
 
 Four connectors are included, each wrapping a different real MCP server. Full
-parameter tables and docker-compose examples live in each connector's own README.
+parameter tables and docker-compose examples live in each connector's own README. All
+four share the authenticating front end in [`gateway/`](gateway/README.md).
 
 | Connector | Folder | Wraps | Read-only enforced by |
 |---|---|---|---|
@@ -86,13 +85,12 @@ its README for why that means no `UPSTREAM_REF` and no auto-bump job for it.
 
 ## Exposing a gateway container
 
-Each gateway listens on port 8000 inside its container and is meant to expect
-`Authorization: Bearer <MCP_BEARER_TOKEN>` (today only `unifi/` actually does; see the
-security notice at the top). Getting HTTPS traffic to that port is
-outside the scope of this repo — put it behind whatever reverse proxy or tunnel you
-already use: Cloudflare Tunnel, Tailscale Funnel/Serve, nginx + Let's Encrypt, Caddy,
-anything that can terminate TLS and forward to a container. Point your MCP client at
-`https://<your-host>/mcp` with that header.
+Each gateway listens on port 8000 inside its container and requires
+`Authorization: Bearer <token>` (checked by [`gateway/auth-proxy.js`](gateway/auth-proxy.js)).
+Getting HTTPS traffic to that port is outside the scope of this repo — put it behind
+whatever reverse proxy or tunnel you already use: Cloudflare Tunnel, Tailscale
+Funnel/Serve, nginx + Let's Encrypt, Caddy, anything that can terminate TLS and forward
+to a container. Point your MCP client at `https://<your-host>/mcp` with that header.
 
 If you use Cloudflare Tunnel, [`docs/exposing-with-cloudflare-tunnel.md`](docs/exposing-with-cloudflare-tunnel.md)
 walks through one concrete setup, including two gotchas worth knowing about up front:
@@ -116,7 +114,8 @@ still a review step before anything new reaches your server.
 off-the-shelf tools (`mcp-proxy`, `supergateway`) installed straight from PyPI/npm in its
 Dockerfile. It has no `UPSTREAM_REF` and `check-upstream.yml` has no job for it —
 bumping those package versions (including the `mcp<2.0` pin, see its README) is a manual
-edit to `metrics/Dockerfile.gateway` when needed.
+edit to `metrics/Dockerfile.gateway` when needed. The same goes for the pinned
+`supergateway` version (`SUPERGATEWAY_VERSION`) that every Dockerfile uses.
 
 Every built image gets an immutable tag alongside `:latest`, so you can always roll back
 to a specific build. Images publish to `ghcr.io/<your-github-user-or-org>/<this-repo>/<connector>`
@@ -143,16 +142,15 @@ endpoint streamable-HTTP, żeby dało się go dodać jako custom connector w Cla
 dowolnym innym kliencie MCP, który mówi streamable-HTTP.
 
 > **Ostrzeżenie o bezpieczeństwie (2026-10-05) — przeczytaj, zanim cokolwiek wystawisz.**
-> Gatewaye `docker/`, `files/` i `metrics/` startują `supergateway` z
+> Do tej daty każdy gateway w tym repo startował `supergateway` z
 > `--oauth2Bearer "$MCP_BEARER_TOKEN"`. W supergateway 4.1.0 ta flaga tylko *dodaje*
-> nagłówek `Authorization`; **nie** sprawdza nagłówka w żądaniach przychodzących.
-> Sprawdzone: bramki uruchomione w ten sposób odpowiadają `200` na żądanie bez tokenu.
-> Dopóki te trzy moduły nie zostaną naprawione, traktuj je jako **nieuwierzytelnione**:
-> polegaj wyłącznie na tym, co ogranicza dostęp przed nimi (reguły tunelu, listy IP),
-> albo je zatrzymaj. Moduł `unifi/` nie używa już tej flagi: przed `supergateway` stoi w
-> nim małe proxy ([`unifi/auth-proxy.js`](unifi/auth-proxy.js), testowane w CI przed
-> każdym buildem), które naprawdę sprawdza token. Przetestuj własny deployment: żądanie
-> bez tokenu musi zwrócić `401` (zobacz [`unifi/README.md`](unifi/README.md#sprawdź-swój-deployment)).
+> nagłówek `Authorization`; **nie** sprawdza nagłówka w żądaniach przychodzących, więc
+> obrazy zbudowane przed 2026-10-05 odpowiadały `200` na żądanie bez tokenu. Wszystkie
+> cztery moduły mają teraz przed `supergateway` małe proxy z uwierzytelnianiem
+> ([`gateway/auth-proxy.js`](gateway/auth-proxy.js), testowane w CI przed każdym buildem).
+> **Zbuduj, wdróż ponownie i sprawdź**: żądanie bez tokenu musi zwrócić `401` (zobacz
+> [`gateway/README.md`](gateway/README.md#sprawdź-swój-deployment)). Jeśli skopiowałeś stary
+> wzorzec, traktuj swoje bramki jako nieuwierzytelnione, dopóki tego nie zrobisz.
 
 To repo wzięło się z podłączania agenta AI do jednego konkretnego domowego serwera, ale
 nic tu nie jest do niego przywiązane. Każdy element — wzorzec gatewaya, wymuszanie trybu
@@ -185,9 +183,9 @@ MCP client (streamable-HTTP, bearer token)
        -> the wrapped MCP server (stdio)
 ```
 
-Diagram pokazuje zamierzony projekt. Zobacz ostrzeżenie o bezpieczeństwie wyżej: dziś
-token faktycznie wymusza tylko `unifi/`, wstawiając proxy z uwierzytelnianiem między
-klienta a `supergateway`.
+Między klientem a `supergateway` stoi proxy z uwierzytelnianiem z
+[`gateway/`](gateway/README.md): `supergateway` nie ma własnego uwierzytelniania żądań
+przychodzących, więc to proxy sprawdza token.
 
 Jeśli opakowywany serwer mówi tylko starym transportem SSE zamiast stdio, dochodzi jeden
 dodatkowy hop — most łączący się z nim jako klient i wystawiający go z powrotem po
@@ -208,7 +206,8 @@ sam gateway potrzebuje, żeby dostać się do opakowywanego serwera.
 ### Connectory w tym repo
 
 W repo są cztery connectory, każdy opakowuje inny, prawdziwy serwer MCP. Pełne tabele
-parametrów i przykłady docker-compose są w README każdego connectora.
+parametrów i przykłady docker-compose są w README każdego connectora. Wszystkie cztery
+korzystają ze wspólnego frontu z uwierzytelnianiem w [`gateway/`](gateway/README.md).
 
 | Connector | Folder | Opakowuje | Tryb tylko-do-odczytu wymuszony przez |
 |---|---|---|---|
@@ -223,13 +222,13 @@ README, dlaczego oznacza to brak `UPSTREAM_REF` i brak joba auto-bumpującego.
 
 ### Wystawianie kontenera gatewaya
 
-Każdy gateway nasłuchuje na porcie 8000 wewnątrz kontenera i ma oczekiwać
-`Authorization: Bearer <MCP_BEARER_TOKEN>` (dziś robi to naprawdę tylko `unifi/`; zobacz
-ostrzeżenie na górze). Doprowadzenie ruchu HTTPS do tego portu jest
-poza zakresem tego repo — postaw go za dowolnym reverse proxy albo tunelem, którego już
-używasz: Cloudflare Tunnel, Tailscale Funnel/Serve, nginx + Let's Encrypt, Caddy,
-cokolwiek, co potrafi terminować TLS i przekazać ruch do kontenera. Skieruj swojego
-klienta MCP na `https://<twój-host>/mcp` z tym nagłówkiem.
+Każdy gateway nasłuchuje na porcie 8000 wewnątrz kontenera i wymaga
+`Authorization: Bearer <token>` (sprawdza to [`gateway/auth-proxy.js`](gateway/auth-proxy.js)).
+Doprowadzenie ruchu HTTPS do tego portu jest poza zakresem tego repo — postaw go za
+dowolnym reverse proxy albo tunelem, którego już używasz: Cloudflare Tunnel, Tailscale
+Funnel/Serve, nginx + Let's Encrypt, Caddy, cokolwiek, co potrafi terminować TLS i
+przekazać ruch do kontenera. Skieruj swojego klienta MCP na `https://<twój-host>/mcp` z
+tym nagłówkiem.
 
 Jeśli używasz Cloudflare Tunnel, [`docs/exposing-with-cloudflare-tunnel.md`](docs/exposing-with-cloudflare-tunnel.md)
 prowadzi przez jeden konkretny setup, razem z dwiema pułapkami, o których warto wiedzieć
@@ -253,7 +252,8 @@ wersji, ale zawsze jest moment przeglądu, zanim coś nowego trafi na twój serw
 składa dwa gotowe narzędzia (`mcp-proxy`, `supergateway`) instalowane wprost z PyPI/npm w
 Dockerfile. Nie ma tu `UPSTREAM_REF`, a `check-upstream.yml` nie ma dla niego joba —
 aktualizacja wersji tych pakietów (w tym pin `mcp<2.0`, zobacz jego README) to ręczna
-edycja `metrics/Dockerfile.gateway`, gdy zajdzie potrzeba.
+edycja `metrics/Dockerfile.gateway`, gdy zajdzie potrzeba. To samo dotyczy przypiętej
+wersji `supergateway` (`SUPERGATEWAY_VERSION`), której używają wszystkie Dockerfile.
 
 Każdy zbudowany obraz dostaje, obok `:latest`, własny niezmienny tag, więc zawsze można
 wrócić do konkretnego builda. Obrazy publikują się pod
