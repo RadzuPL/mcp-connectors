@@ -14,6 +14,7 @@ SG_PORT="${UPSTREAM_PORT:-8001}"
 # small preload pins the port to 127.0.0.1 (see force-loopback.js).
 HOST_ARGS=()
 SG_ENV=()
+STATE_ARGS=()
 if supergateway --help 2>&1 | grep -q -- '--host'; then
   HOST_ARGS=(--host 127.0.0.1)
 else
@@ -21,11 +22,21 @@ else
   SG_ENV=("NODE_OPTIONS=--require ${APP_DIR}/force-loopback.js" "FORCE_LOOPBACK_PORT=${SG_PORT}")
 fi
 
+# Stateless mode (the default) starts a fresh server process per HTTP request, and
+# unifi-network-mcp logs in to the controller on every start; UniFi OS answers a burst
+# of logins with an authentication rate limit. Stateful mode keeps one server process
+# (and one login) per client session.
+if supergateway --help 2>&1 | grep -q -- '--stateful'; then
+  STATE_ARGS=(--stateful --sessionTimeout "${GATEWAY_SESSION_TIMEOUT_MS:-1800000}")
+else
+  echo "entrypoint: WARNING: supergateway has no --stateful flag; every request starts a new server and logs in again" >&2
+fi
+
 node "${APP_DIR}/auth-proxy.js" &
 PROXY_PID=$!
 
 env ${SG_ENV[@]+"${SG_ENV[@]}"} supergateway --stdio 'unifi-network-mcp' --outputTransport streamableHttp \
-  ${HOST_ARGS[@]+"${HOST_ARGS[@]}"} --port "${SG_PORT}" &
+  ${HOST_ARGS[@]+"${HOST_ARGS[@]}"} ${STATE_ARGS[@]+"${STATE_ARGS[@]}"} --port "${SG_PORT}" &
 GATEWAY_PID=$!
 
 stop() {
