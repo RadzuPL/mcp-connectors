@@ -65,11 +65,13 @@ expect_nolog() { if grep -qF -- "$2" "${LOG}"; then bad "$1 (log has: $2)"; else
 http_code() { curl -s -m 2 -o /dev/null -w '%{http_code}' "$@" 2>/dev/null; }
 
 # start_ep VAR=value ... : runs the entrypoint in a clean environment, waits for the proxy.
+# It is started through `bash` on purpose: files pushed through the GitHub API (and some
+# checkouts) lose the executable bit, and the test must not depend on it.
 start_ep() {
   : > "${LOG}"
   env -i PATH="${WORK}/bin:${PATH}" HOME="${WORK}" APP_DIR="${HERE}" \
     LISTEN_PORT="${LISTEN_PORT}" UPSTREAM_PORT="${UPSTREAM_PORT}" "$@" \
-    "${HERE}/entrypoint.sh" > "${LOG}" 2>&1 &
+    bash "${HERE}/entrypoint.sh" > "${LOG}" 2>&1 &
   EP=$!
   for _ in $(seq 1 60); do
     [ "$(http_code "http://127.0.0.1:${LISTEN_PORT}/mcp")" != "000" ] && return 0
