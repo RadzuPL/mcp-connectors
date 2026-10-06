@@ -44,9 +44,24 @@ CMD ["/app/gateway/entrypoint.sh"]
 | `MCP_BEARER_TOKEN_FILE` | yes, or `MCP_BEARER_TOKEN` | Path to a file containing the token, at least 24 characters. Preferred: the token stays out of `docker inspect`, out of container templates and out of the process list. |
 | `MCP_BEARER_TOKEN` | alternative to the file | The token itself. Works, but it is visible in `docker inspect` and in container templates. |
 | `MCP_ALLOW_PATH_TOKEN` | no | `true` also accepts the token as the first URL path segment (`https://<host>/<token>/mcp`), for clients that cannot send an `Authorization` header. Off by default, because URLs end up in logs. |
-| `GATEWAY_STATEFUL` | no | `true` runs supergateway with `--stateful`: one wrapped-server process per client session instead of one per request. Needed by servers that log in somewhere on every start (`unifi/`). Default `false`. |
-| `GATEWAY_SESSION_TIMEOUT_MS` | no | Inactivity timeout of a stateful session. Default `1800000` (30 minutes). |
+| `GATEWAY_STATEFUL` | no | `true` runs supergateway with `--stateful`: one wrapped-server process per client session instead of one per request. Use it when the wrapped server is slow to start or logs in somewhere on every start (`unifi/`, and `docker/` on a loaded host). Default `false`. See [Stateless or stateful?](#stateless-or-stateful). |
+| `GATEWAY_SESSION_TIMEOUT_MS` | no | Inactivity timeout of a stateful session. Default `1800000` (30 minutes). Every session keeps its own wrapped-server process until it expires, so read [Stateless or stateful?](#stateless-or-stateful) before changing it. |
 | `LISTEN_PORT` / `UPSTREAM_PORT` | no | `8000` (the proxy) and `8001` (supergateway, loopback only). |
+
+## Stateless or stateful?
+
+By default (`GATEWAY_STATEFUL=false`) supergateway is stateless: it starts a **new copy of the wrapped server for every HTTP request**. That is simple and robust, and it is fine for fast servers (`files/`, `metrics/`).
+
+It breaks down when the wrapped server is slow to start. A client opens with several requests (`initialize`, then `tools/list`, `prompts/list`, `resources/list`), and each one pays the whole startup cost. Measured on a loaded host (load average about 7): `mcp-server-docker` (Python) needed 5.7 to 8.4 s per request. The client gave up on some of them (cloudflared logged `Incoming request ended abruptly: context canceled`), and Claude showed "Connection issue" although the token, the backend and the WAF were all fine. In the container log the symptom is a client that sends `initialize` again and again and never follows up with `tools/list`.
+
+`GATEWAY_STATEFUL=true` starts one wrapped-server process per client **session**. The first `initialize` of a session still pays the startup cost once (about 6 s in the example above); the requests after it took 0.02 to 0.06 s.
+
+Things to know in stateful mode:
+
+- Every request after `initialize` must carry the `Mcp-Session-Id` header from the `initialize` response. Without it the gateway answers `400 Bad Request: No valid session ID provided`. That is correct behaviour, not a fault. The plain `initialize` checks below are unaffected, but a hand-written `tools/list` test needs the header (see the full handshake script below).
+- A session the gateway no longer knows (expired, or lost in a restart) gets `404`, which the MCP specification tells a client to answer with a new session. That is what supergateway's source does; it has not been exercised against Claude's client here. The first `initialize` of the new session pays the startup cost again.
+- Every session keeps its own wrapped-server process until `GATEWAY_SESSION_TIMEOUT_MS` of inactivity. Clients also open short probe sessions that are never reused, so processes and memory accumulate for up to the timeout (observed on one deployment: 15 `mcp-server-docker` lines in `docker top` and about 490 MiB for the container). Check with `docker top <container>` and `docker stats --no-stream <container>`.
+- A shorter timeout frees memory sooner but makes new sessions, and with them the slow `initialize`, more frequent. Shorten it only if you actually see the processes pile up.
 
 ## Token
 
@@ -55,6 +70,8 @@ Generate one with `openssl rand -hex 32` and keep it in a file mounted read-only
 ## Using it from Claude
 
 Settings → Connectors → Add custom connector. URL `https://<your-host>/mcp`. Under Authentication choose **No sign-in**, and under Request headers add `authorization` with the value `Bearer <token>`. Claude will still show "Sign in now" tagged Detected, with a warning: that is only because the server answers `401` to a request without credentials, and these servers have no OAuth.
+
+If a connector that has been idle shows "Connection issue", press **Reconnect**: a new session starts, and with a slow wrapped server its first `initialize` can take several seconds (see above).
 
 ## Verify your deployment
 
@@ -69,6 +86,36 @@ The same request with `-H "Authorization: Bearer <token>"` must return `200`. su
 ```bash
 docker run --rm --network <your-network> curlimages/curl -s -m 3 -o /dev/null -w "%{http_code}\n" http://<container>:8001/mcp
 ```
+
+### Full handshake (works in both modes)
+
+This script does what a client does: `initialize`, then the follow-up requests with the session id from the response (in stateless mode there is none, and that is fine). It prints the HTTP code and time of every step, which also shows how slow the wrapped server is to start. Replace `<container>`:
+
+```bash
+cat > /tmp/mcp-test.sh <<'EOF'
+U=http://<container>:8000/mcp
+J='Content-Type: application/json'
+A='Accept: application/json, text/event-stream'
+P='MCP-Protocol-Version: 2025-11-25'
+AUTH="Authorization: Bearer $T"
+
+echo "--- initialize"
+curl -s -m 30 -D /tmp/h -o /dev/null -w "HTTP %{http_code}, %{time_total}s\n" -X POST "$U" -H "$AUTH" -H "$J" -H "$A" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}'
+SID=$(tr -d '\r' < /tmp/h | grep -i '^mcp-session-id:' | cut -d' ' -f2)
+echo "session: ${SID:-none}"
+
+for body in '{"jsonrpc":"2.0","method":"notifications/initialized"}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' '{"jsonrpc":"2.0","id":3,"method":"prompts/list"}' '{"jsonrpc":"2.0","id":4,"method":"resources/list"}'; do
+  echo "--- $(echo "$body" | cut -c1-60)"
+  curl -s -m 30 -o /dev/null -w "HTTP %{http_code}, %{time_total}s\n" -X POST "$U" -H "$AUTH" -H "$J" -H "$A" -H "$P" -H "Mcp-Session-Id: $SID" -d "$body"
+done
+EOF
+```
+
+```bash
+docker run --rm --network <your-network> -e T="$(cat /path/to/bearer_token)" -v /tmp/mcp-test.sh:/t.sh:ro curlimages/curl sh /t.sh
+```
+
+Expect `200` for `initialize`, `202` for `notifications/initialized` and `200` for the rest. In stateful mode only the first line is slow.
 
 ## Tests
 
@@ -127,9 +174,24 @@ CMD ["/app/gateway/entrypoint.sh"]
 | `MCP_BEARER_TOKEN_FILE` | tak, albo `MCP_BEARER_TOKEN` | Ścieżka do pliku z tokenem, minimum 24 znaki. Zalecane: token nie jest widoczny w `docker inspect`, w szablonach kontenerów ani na liście procesów. |
 | `MCP_BEARER_TOKEN` | alternatywa dla pliku | Sam token. Działa, ale jest widoczny w `docker inspect` i w szablonach kontenerów. |
 | `MCP_ALLOW_PATH_TOKEN` | nie | `true` przyjmuje też token jako pierwszy segment ścieżki (`https://<host>/<token>/mcp`), dla klientów, które nie potrafią wysłać nagłówka `Authorization`. Domyślnie wyłączone, bo adresy URL trafiają do logów. |
-| `GATEWAY_STATEFUL` | nie | `true` uruchamia supergateway z `--stateful`: jeden proces opakowywanego serwera na sesję klienta zamiast jednego na żądanie. Potrzebne serwerom, które logują się gdzieś przy każdym starcie (`unifi/`). Domyślnie `false`. |
-| `GATEWAY_SESSION_TIMEOUT_MS` | nie | Limit bezczynności sesji stateful. Domyślnie `1800000` (30 minut). |
+| `GATEWAY_STATEFUL` | nie | `true` uruchamia supergateway z `--stateful`: jeden proces opakowywanego serwera na sesję klienta zamiast jednego na żądanie. Używaj, gdy opakowywany serwer wolno startuje albo loguje się gdzieś przy każdym starcie (`unifi/` oraz `docker/` na obciążonym hoście). Domyślnie `false`. Zobacz [Stateless czy stateful?](#stateless-czy-stateful). |
+| `GATEWAY_SESSION_TIMEOUT_MS` | nie | Limit bezczynności sesji stateful. Domyślnie `1800000` (30 minut). Każda sesja trzyma własny proces opakowywanego serwera aż do wygaśnięcia, więc przeczytaj [Stateless czy stateful?](#stateless-czy-stateful) przed zmianą. |
 | `LISTEN_PORT` / `UPSTREAM_PORT` | nie | `8000` (proxy) i `8001` (supergateway, tylko loopback). |
+
+### Stateless czy stateful?
+
+Domyślnie (`GATEWAY_STATEFUL=false`) supergateway jest stateless: uruchamia **nową kopię opakowywanego serwera dla każdego żądania HTTP**. To proste i odporne, i wystarcza dla szybkich serwerów (`files/`, `metrics/`).
+
+Przestaje działać, gdy opakowywany serwer wolno startuje. Klient zaczyna od kilku żądań (`initialize`, potem `tools/list`, `prompts/list`, `resources/list`), a każde płaci pełny koszt startu. Zmierzone na obciążonym hoście (load average około 7): `mcp-server-docker` (Python) potrzebował 5,7 do 8,4 s na żądanie. Klient rezygnował z części z nich (cloudflared logował `Incoming request ended abruptly: context canceled`), a Claude pokazywał „Connection issue”, choć token, backend i WAF były w porządku. W logu kontenera objaw wygląda tak: klient wysyła `initialize` w kółko i nigdy nie przechodzi do `tools/list`.
+
+`GATEWAY_STATEFUL=true` uruchamia jeden proces opakowywanego serwera na **sesję** klienta. Pierwsze `initialize` w sesji nadal płaci koszt startu raz (w przykładzie około 6 s); kolejne żądania trwały 0,02 do 0,06 s.
+
+Co warto wiedzieć w trybie stateful:
+
+- Każde żądanie po `initialize` musi nieść nagłówek `Mcp-Session-Id` z odpowiedzi na `initialize`. Bez niego bramka odpowiada `400 Bad Request: No valid session ID provided`. To poprawne zachowanie, nie usterka. Zwykłe testy `initialize` poniżej nie są dotknięte, ale ręcznie napisany test `tools/list` potrzebuje tego nagłówka (zobacz skrypt pełnego handshake poniżej).
+- Sesja, której bramka już nie zna (wygasła albo zginęła przy restarcie), dostaje `404`, na co specyfikacja MCP każe klientowi odpowiedzieć nową sesją. Tak działa kod supergateway; nie sprawdzono tego tu na kliencie Claude. Pierwsze `initialize` nowej sesji płaci koszt startu ponownie.
+- Każda sesja trzyma własny proces opakowywanego serwera aż do `GATEWAY_SESSION_TIMEOUT_MS` bezczynności. Klienci otwierają też krótkie sesje-sondy, które nigdy nie są ponownie używane, więc procesy i pamięć narastają przez czas limitu (zaobserwowano na jednym wdrożeniu: 15 linii `mcp-server-docker` w `docker top` i około 490 MiB dla kontenera). Sprawdzisz to przez `docker top <kontener>` i `docker stats --no-stream <kontener>`.
+- Krótszy limit szybciej zwalnia pamięć, ale sprawia, że nowe sesje, a z nimi wolne `initialize`, zdarzają się częściej. Skracaj go tylko wtedy, gdy faktycznie widzisz narastanie procesów.
 
 ### Token
 
@@ -138,6 +200,8 @@ Wygeneruj go przez `openssl rand -hex 32` i trzymaj w pliku montowanym tylko do 
 ### Użycie z Claude
 
 Settings → Connectors → Add custom connector. Adres `https://<twój-host>/mcp`. W „Authentication” wybierz **No sign-in**, a w „Request headers” dodaj `authorization` z wartością `Bearer <token>`. Claude i tak pokaże „Sign in now” z oznaczeniem Detected i ostrzeżeniem: to tylko dlatego, że serwer odpowiada `401` na żądanie bez poświadczeń, a te serwery nie mają OAuth.
+
+Jeśli konektor, który długo stał nieużywany, pokazuje „Connection issue”, kliknij **Reconnect**: startuje nowa sesja, a przy wolnym opakowywanym serwerze jej pierwsze `initialize` może trwać kilka sekund (zobacz wyżej).
 
 ### Sprawdź swój deployment
 
@@ -152,6 +216,36 @@ To samo żądanie z `-H "Authorization: Bearer <token>"` musi zwrócić `200`. W
 ```bash
 docker run --rm --network <twoja-siec> curlimages/curl -s -m 3 -o /dev/null -w "%{http_code}\n" http://<kontener>:8001/mcp
 ```
+
+#### Pełny handshake (działa w obu trybach)
+
+Skrypt robi to, co klient: `initialize`, potem kolejne żądania z identyfikatorem sesji z odpowiedzi (w trybie stateless go nie ma i to jest w porządku). Wypisuje kod HTTP i czas każdego kroku, co przy okazji pokazuje, jak wolno startuje opakowywany serwer. Podmień `<kontener>`:
+
+```bash
+cat > /tmp/mcp-test.sh <<'EOF'
+U=http://<kontener>:8000/mcp
+J='Content-Type: application/json'
+A='Accept: application/json, text/event-stream'
+P='MCP-Protocol-Version: 2025-11-25'
+AUTH="Authorization: Bearer $T"
+
+echo "--- initialize"
+curl -s -m 30 -D /tmp/h -o /dev/null -w "HTTP %{http_code}, %{time_total}s\n" -X POST "$U" -H "$AUTH" -H "$J" -H "$A" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}'
+SID=$(tr -d '\r' < /tmp/h | grep -i '^mcp-session-id:' | cut -d' ' -f2)
+echo "session: ${SID:-none}"
+
+for body in '{"jsonrpc":"2.0","method":"notifications/initialized"}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' '{"jsonrpc":"2.0","id":3,"method":"prompts/list"}' '{"jsonrpc":"2.0","id":4,"method":"resources/list"}'; do
+  echo "--- $(echo "$body" | cut -c1-60)"
+  curl -s -m 30 -o /dev/null -w "HTTP %{http_code}, %{time_total}s\n" -X POST "$U" -H "$AUTH" -H "$J" -H "$A" -H "$P" -H "Mcp-Session-Id: $SID" -d "$body"
+done
+EOF
+```
+
+```bash
+docker run --rm --network <twoja-siec> -e T="$(cat /sciezka/do/bearer_token)" -v /tmp/mcp-test.sh:/t.sh:ro curlimages/curl sh /t.sh
+```
+
+Oczekuj `200` dla `initialize`, `202` dla `notifications/initialized` i `200` dla reszty. W trybie stateful wolny jest tylko pierwszy wiersz.
 
 ### Testy
 
