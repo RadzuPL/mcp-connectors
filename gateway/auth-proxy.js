@@ -16,6 +16,9 @@
 //                           segment (/<token>/mcp), for clients that cannot send
 //                           an Authorization header. Off by default, because
 //                           URLs end up in logs.
+//   GATEWAY_SHARED_SESSION  "true" funnels every client into ONE upstream session
+//                           (see shared-session.js). Only meaningful when supergateway
+//                           runs --stateful; entrypoint.sh switches it off otherwise.
 //   LISTEN_PORT             default 8000
 //   UPSTREAM_PORT           default 8001 (supergateway, on 127.0.0.1)
 
@@ -26,6 +29,7 @@ const crypto = require('crypto');
 const LISTEN_PORT = parseInt(process.env.LISTEN_PORT || '8000', 10);
 const UPSTREAM_PORT = parseInt(process.env.UPSTREAM_PORT || '8001', 10);
 const ALLOW_PATH_TOKEN = String(process.env.MCP_ALLOW_PATH_TOKEN || '').toLowerCase() === 'true';
+const SHARED_SESSION = ['true', '1', 'yes'].includes(String(process.env.GATEWAY_SHARED_SESSION || '').toLowerCase());
 const MIN_TOKEN_LENGTH = 24;
 
 function loadToken() {
@@ -98,6 +102,13 @@ const HOP_BY_HOP = new Set([
   'upgrade',
 ]);
 
+const shared = SHARED_SESSION
+  ? require('./shared-session').createSharedSession({
+      upstreamPort: UPSTREAM_PORT,
+      log: (m) => console.error(`auth-proxy: shared-session: ${m}`),
+    })
+  : null;
+
 const server = http.createServer((req, res) => {
   let upstreamPath = null;
   if (headerTokenOk(req)) {
@@ -109,6 +120,10 @@ const server = http.createServer((req, res) => {
     req.resume(); // drop the body, do not let it reach the upstream
     return deny(res);
   }
+
+  // Authenticated from here on. In shared-session mode the request never goes through
+  // the plain pass-through below.
+  if (shared) return shared.handle(req, res, upstreamPath);
 
   const headers = {};
   for (const [k, v] of Object.entries(req.headers)) {
@@ -151,7 +166,8 @@ server.keepAliveTimeout = 65000;
 server.listen(LISTEN_PORT, '0.0.0.0', () => {
   console.error(
     `auth-proxy: listening on :${LISTEN_PORT}, upstream 127.0.0.1:${UPSTREAM_PORT}, ` +
-      `path-token mode ${ALLOW_PATH_TOKEN ? 'ON' : 'off'}`
+      `path-token mode ${ALLOW_PATH_TOKEN ? 'ON' : 'off'}, ` +
+      `shared-session mode ${SHARED_SESSION ? 'ON' : 'off'}`
   );
 });
 

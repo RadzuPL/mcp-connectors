@@ -147,6 +147,35 @@ start_ep MCP_BEARER_TOKEN_FILE="${WORK}/token" GATEWAY_STATEFUL=true GATEWAY_SES
 expect_log "5: custom timeout passed" 'FAKE-ARG[900000]'
 stop_ep
 
+echo "== 5b. shared-session mode (stateful supergateway)"
+start_ep MCP_BEARER_TOKEN_FILE="${WORK}/token" GATEWAY_STATEFUL=true GATEWAY_SHARED_SESSION=true GATEWAY_STDIO_CMD='some-server' || bad "5b: entrypoint did not come up"
+expect_log "5b: proxy announces shared-session mode" 'shared-session mode ON'
+expect_log "5b: supergateway still runs --stateful" 'FAKE-ARG[--stateful]'
+expect_eq "5b: no token -> 401" "$(http_code -X POST "http://127.0.0.1:${LISTEN_PORT}/mcp")" "401"
+INIT='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}'
+expect_eq "5b: valid token reaches the shared-session handler (fake upstream is not MCP -> 502)" \
+  "$(http_code -X POST -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d "${INIT}" "http://127.0.0.1:${LISTEN_PORT}/mcp")" "502"
+expect_eq "5b: GET is answered by the proxy itself (405)" "$(http_code -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${LISTEN_PORT}/mcp")" "405"
+stop_ep
+
+echo "== 5c. shared-session requested without stateful support"
+start_ep MCP_BEARER_TOKEN_FILE="${WORK}/token" FAKE_HAS_STATEFUL=0 GATEWAY_STATEFUL=true GATEWAY_SHARED_SESSION=true GATEWAY_STDIO_CMD='some-server' || bad "5c: entrypoint did not come up"
+expect_log "5c: warns" 'GATEWAY_SHARED_SESSION needs a stateful supergateway'
+expect_log "5c: mode is off" 'shared-session mode off'
+stop_ep
+
+echo "== 5d. shared-session without GATEWAY_STATEFUL"
+start_ep MCP_BEARER_TOKEN_FILE="${WORK}/token" GATEWAY_SHARED_SESSION=true GATEWAY_STDIO_CMD='some-server' || bad "5d: entrypoint did not come up"
+expect_log "5d: warns" 'GATEWAY_SHARED_SESSION needs a stateful supergateway'
+expect_log "5d: mode is off" 'shared-session mode off'
+stop_ep
+
+echo "== 5e. shared-session off by default"
+start_ep MCP_BEARER_TOKEN_FILE="${WORK}/token" GATEWAY_STATEFUL=true GATEWAY_STDIO_CMD='some-server' || bad "5e: entrypoint did not come up"
+expect_log "5e: mode is off" 'shared-session mode off'
+expect_eq "5e: pass-through as before (right token -> 200)" "$(http_code -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:${LISTEN_PORT}/mcp")" "200"
+stop_ep
+
 echo "== 6. fails closed: no GATEWAY_STDIO_CMD"
 start_ep MCP_BEARER_TOKEN_FILE="${WORK}/token" && bad "6: should not have come up"
 wait_exit 5

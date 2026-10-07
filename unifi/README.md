@@ -18,7 +18,19 @@ This connector runs with `GATEWAY_STATEFUL=true`. `unifi-network-mcp` logs in to
 controller every time it starts, and in stateless mode supergateway starts a new server
 for every HTTP request. Observed on 2026-10-05: three requests within nine seconds meant
 three logins, then `AuthenticationRateLimitError` and a 60-second lockout. Stateful mode
-keeps one server process, and one login, per client session.
+keeps one server process, and one login, per client **session**. Claude opens a new session
+for every tool call, though (observed 2026-10-07: three calls, three server starts, three
+logins; no lockout at that rate), so stateful alone means one login per call, not one per
+container lifetime.
+
+To get one login per container lifetime, set `GATEWAY_SHARED_SESSION=true` (opt-in, not
+baked into the image; see [Shared-session mode](../gateway/README.md#shared-session-mode)).
+In Unraid: Edit the container, *Add another Path, Port, Variable, Label or Device*, Config
+Type `Variable`, Name `GATEWAY_SHARED_SESSION`, Key `GATEWAY_SHARED_SESSION`, Value `true`,
+Apply. To roll back, remove the variable. Verify with `docker logs mcp-unifi-connector`:
+the proxy line must say `shared-session mode ON`, and several tool calls must add no new
+wrapped-server start or login after the first. This mode has been tested against a mock
+upstream only, not against a real supergateway in CI.
 
 ## Read-only: two layers, and neither is a substitute for checking
 
@@ -42,8 +54,8 @@ at its default.
 ## Tool discovery
 
 The server defaults to `lazy` registration: a client first sees a handful of meta-tools
-(e.g. `unifi_load_tools`, `unifi_execute`, `unifi_batch`) instead of all 209 Network
-tools, which keeps the client's context small. No setting needed.
+(e.g. `unifi_load_tools`, `unifi_execute`, `unifi_batch`) instead of all 203 Network
+tools (209 with the meta-tools), which keeps the client's context small. No setting needed.
 
 ## Configuration
 
@@ -132,7 +144,19 @@ Ten connector działa z `GATEWAY_STATEFUL=true`. `unifi-network-mcp` loguje się
 kontrolera przy każdym starcie, a w trybie stateless supergateway uruchamia nowy serwer
 dla każdego żądania HTTP. Zaobserwowane 2026-10-05: trzy żądania w dziewięć sekund
 oznaczały trzy logowania, potem `AuthenticationRateLimitError` i 60 sekund blokady. Tryb
-stateful trzyma jeden proces serwera, i jedno logowanie, na sesję klienta.
+stateful trzyma jeden proces serwera, i jedno logowanie, na **sesję** klienta. Claude
+otwiera jednak nową sesję przy każdym wywołaniu narzędzia (zaobserwowano 2026-10-07: trzy
+wywołania, trzy starty serwera, trzy logowania; przy takim tempie bez blokady), więc samo
+stateful oznacza jedno logowanie na wywołanie, nie jedno na życie kontenera.
+
+Żeby mieć jedno logowanie na życie kontenera, ustaw `GATEWAY_SHARED_SESSION=true` (opt-in,
+nie wbudowane w obraz; zobacz [Tryb współdzielonej sesji](../gateway/README.md#tryb-współdzielonej-sesji)).
+W Unraid: Edit kontenera, *Add another Path, Port, Variable, Label or Device*, Config Type
+`Variable`, Name `GATEWAY_SHARED_SESSION`, Key `GATEWAY_SHARED_SESSION`, Value `true`,
+Apply. Cofnięcie: usuń zmienną. Weryfikacja przez `docker logs mcp-unifi-connector`: linia
+proxy ma mówić `shared-session mode ON`, a kolejne wywołania narzędzi nie mogą dodawać
+nowego startu serwera ani logowania po pierwszym. Tryb przetestowano tylko na atrapie
+upstream, nie na prawdziwym supergateway w CI.
 
 ### Tylko odczyt: dwie warstwy, i żadna nie zwalnia ze sprawdzenia
 
@@ -155,8 +179,8 @@ SNMP, ...) w odpowiedziach; zostaw `UNIFI_REDACT_SENSITIVE_FIELDS` na wartości 
 ### Wykrywanie narzędzi
 
 Serwer domyślnie działa w trybie `lazy`: klient widzi najpierw kilka meta-narzędzi (np.
-`unifi_load_tools`, `unifi_execute`, `unifi_batch`) zamiast wszystkich 209 narzędzi
-Network, co oszczędza kontekst klienta. Nic nie trzeba ustawiać.
+`unifi_load_tools`, `unifi_execute`, `unifi_batch`) zamiast wszystkich 203 narzędzi
+Network (209 z meta-narzędziami), co oszczędza kontekst klienta. Nic nie trzeba ustawiać.
 
 ### Konfiguracja
 

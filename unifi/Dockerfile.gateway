@@ -27,6 +27,8 @@ RUN chmod +x /app/gateway/entrypoint.sh
 
 # unifi-network-mcp logs in to the controller every time it starts, and UniFi OS rate-limits
 # logins, so it must run once per client session (stateful), not once per request.
+# Claude opens a session per tool call, so stateful still logs in once per call; set
+# GATEWAY_SHARED_SESSION=true at run time (opt-in) for one login per container lifetime.
 ENV GATEWAY_STDIO_CMD="unifi-network-mcp" \
     GATEWAY_STATEFUL="true"
 

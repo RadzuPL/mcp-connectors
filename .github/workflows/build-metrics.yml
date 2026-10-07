@@ -25,6 +25,9 @@ jobs:
       - name: Test that supergateway's port is pinned to loopback
         run: node gateway/test-loopback.js
 
+      - name: Test the shared-session mode
+        run: node gateway/test-shared-session.js
+
       - name: Test the entrypoint
         run: bash gateway/test-entrypoint.sh
 

@@ -46,6 +46,7 @@ CMD ["/app/gateway/entrypoint.sh"]
 | `MCP_ALLOW_PATH_TOKEN` | no | `true` also accepts the token as the first URL path segment (`https://<host>/<token>/mcp`), for clients that cannot send an `Authorization` header. Off by default, because URLs end up in logs. |
 | `GATEWAY_STATEFUL` | no | `true` runs supergateway with `--stateful`: one wrapped-server process per client session instead of one per request. Use it when the wrapped server is slow to start or logs in somewhere on every start (`unifi/`, and `docker/` on a loaded host). Default `false`. See [Stateless or stateful?](#stateless-or-stateful). |
 | `GATEWAY_SESSION_TIMEOUT_MS` | no | Inactivity timeout of a stateful session. Default `1800000` (30 minutes). Every session keeps its own wrapped-server process until it expires, so read [Stateless or stateful?](#stateless-or-stateful) before changing it. |
+| `GATEWAY_SHARED_SESSION` | no | `true` makes the proxy funnel every client into **one** stateful session: one wrapped-server process and one login for the lifetime of the container, however many sessions the client opens. Needs `GATEWAY_STATEFUL=true`; without a stateful supergateway it is switched off with a warning. Default `false`. See [Shared-session mode](#shared-session-mode). |
 | `LISTEN_PORT` / `UPSTREAM_PORT` | no | `8000` (the proxy) and `8001` (supergateway, loopback only). |
 
 ## Stateless or stateful?
@@ -54,7 +55,7 @@ By default (`GATEWAY_STATEFUL=false`) supergateway is stateless: it starts a **n
 
 It breaks down when the wrapped server is slow to start. A client opens with several requests (`initialize`, then `tools/list`, `prompts/list`, `resources/list`), and each one pays the whole startup cost. Measured on a loaded host (load average about 7): `mcp-server-docker` (Python) needed 5.7 to 8.4 s per request. The client gave up on some of them (cloudflared logged `Incoming request ended abruptly: context canceled`), and Claude showed "Connection issue" although the token, the backend and the WAF were all fine. In the container log the symptom is a client that sends `initialize` again and again and never follows up with `tools/list`.
 
-`GATEWAY_STATEFUL=true` starts one wrapped-server process per client **session**. The first `initialize` of a session still pays the startup cost once (about 6 s in the example above); the requests after it took 0.02 to 0.06 s.
+`GATEWAY_STATEFUL=true` starts one wrapped-server process per client **session**. Caution: Claude opens a new session for every tool call, so per call this is no cheaper than stateless in the number of server starts; see [Shared-session mode](#shared-session-mode). The first `initialize` of a session still pays the startup cost once (about 6 s in the example above); the requests after it took 0.02 to 0.06 s.
 
 Things to know in stateful mode:
 
@@ -62,6 +63,24 @@ Things to know in stateful mode:
 - A session the gateway no longer knows (expired, or lost in a restart) gets `404`, which the MCP specification tells a client to answer with a new session. That is what supergateway's source does; it has not been exercised against Claude's client here. The first `initialize` of the new session pays the startup cost again.
 - Every session keeps its own wrapped-server process until `GATEWAY_SESSION_TIMEOUT_MS` of inactivity. Clients also open short probe sessions that are never reused, so processes and memory accumulate for up to the timeout (observed on one deployment: 15 `mcp-server-docker` lines in `docker top` and about 490 MiB for the container). Check with `docker top <container>` and `docker stats --no-stream <container>`.
 - A shorter timeout frees memory sooner but makes new sessions, and with them the slow `initialize`, more frequent. Shorten it only if you actually see the processes pile up.
+
+## Shared-session mode
+
+Stateful mode gives one wrapped-server process per client *session*. Claude's client, however, opens a **new session for every tool call** (observed on `unifi/`: three calls, three `initialize`, three server starts, three logins). For a server that logs in somewhere on start, stateful mode alone therefore does not mean "one login": it means one login per call, and a burst of calls can still hit the login rate limit.
+
+`GATEWAY_SHARED_SESSION=true` (together with `GATEWAY_STATEFUL=true`) changes that. The proxy opens a single upstream session on first use and keeps it:
+
+- every client `initialize` is answered from the cached result of the upstream `initialize` (with a fresh random `Mcp-Session-Id`, which the proxy ignores on later requests);
+- every request is forwarded on the shared upstream session; JSON-RPC ids are replaced by unique `gw-N` ids and restored in the answer, so concurrent clients cannot receive each other's answers;
+- if the upstream session disappears (404, or 400 mentioning the session) the proxy opens a new one and retries the request once.
+
+Limitations, stated plainly:
+
+- All clients share one session and therefore one wrapped-server state. Fine for a single-user connector behind a bearer token; not for anything that needs per-client state.
+- No server-initiated messages: `GET /mcp` answers `405`, `DELETE /mcp` answers `204` and is **not** forwarded (a client closing its session must not kill the shared one).
+- The upstream session is opened with the protocol version of the first client that connects.
+- The unit tests (`gateway/test-shared-session.js`) run against a mock stateful upstream. Compatibility with a real supergateway was not verified in CI; check a deployment in the container log: several tool calls must produce **one** start/login of the wrapped server.
+- Off by default; remove the variable to go back to plain stateful behaviour.
 
 ## Token
 
@@ -176,6 +195,7 @@ CMD ["/app/gateway/entrypoint.sh"]
 | `MCP_ALLOW_PATH_TOKEN` | nie | `true` przyjmuje też token jako pierwszy segment ścieżki (`https://<host>/<token>/mcp`), dla klientów, które nie potrafią wysłać nagłówka `Authorization`. Domyślnie wyłączone, bo adresy URL trafiają do logów. |
 | `GATEWAY_STATEFUL` | nie | `true` uruchamia supergateway z `--stateful`: jeden proces opakowywanego serwera na sesję klienta zamiast jednego na żądanie. Używaj, gdy opakowywany serwer wolno startuje albo loguje się gdzieś przy każdym starcie (`unifi/` oraz `docker/` na obciążonym hoście). Domyślnie `false`. Zobacz [Stateless czy stateful?](#stateless-czy-stateful). |
 | `GATEWAY_SESSION_TIMEOUT_MS` | nie | Limit bezczynności sesji stateful. Domyślnie `1800000` (30 minut). Każda sesja trzyma własny proces opakowywanego serwera aż do wygaśnięcia, więc przeczytaj [Stateless czy stateful?](#stateless-czy-stateful) przed zmianą. |
+| `GATEWAY_SHARED_SESSION` | nie | `true` sprawia, że proxy kieruje wszystkich klientów do **jednej** sesji stateful: jeden proces opakowywanego serwera i jedno logowanie przez cały czas życia kontenera, niezależnie od liczby sesji otwieranych przez klienta. Wymaga `GATEWAY_STATEFUL=true`; bez stateful supergateway jest wyłączane z ostrzeżeniem. Domyślnie `false`. Zobacz [Tryb współdzielonej sesji](#tryb-współdzielonej-sesji). |
 | `LISTEN_PORT` / `UPSTREAM_PORT` | nie | `8000` (proxy) i `8001` (supergateway, tylko loopback). |
 
 ### Stateless czy stateful?
@@ -184,7 +204,7 @@ Domyślnie (`GATEWAY_STATEFUL=false`) supergateway jest stateless: uruchamia **n
 
 Przestaje działać, gdy opakowywany serwer wolno startuje. Klient zaczyna od kilku żądań (`initialize`, potem `tools/list`, `prompts/list`, `resources/list`), a każde płaci pełny koszt startu. Zmierzone na obciążonym hoście (load average około 7): `mcp-server-docker` (Python) potrzebował 5,7 do 8,4 s na żądanie. Klient rezygnował z części z nich (cloudflared logował `Incoming request ended abruptly: context canceled`), a Claude pokazywał „Connection issue”, choć token, backend i WAF były w porządku. W logu kontenera objaw wygląda tak: klient wysyła `initialize` w kółko i nigdy nie przechodzi do `tools/list`.
 
-`GATEWAY_STATEFUL=true` uruchamia jeden proces opakowywanego serwera na **sesję** klienta. Pierwsze `initialize` w sesji nadal płaci koszt startu raz (w przykładzie około 6 s); kolejne żądania trwały 0,02 do 0,06 s.
+`GATEWAY_STATEFUL=true` uruchamia jeden proces opakowywanego serwera na **sesję** klienta. Uwaga: Claude otwiera nową sesję przy każdym wywołaniu narzędzia, więc w liczbie startów serwera na wywołanie nie jest to tańsze niż stateless; zobacz [Tryb współdzielonej sesji](#tryb-współdzielonej-sesji). Pierwsze `initialize` w sesji nadal płaci koszt startu raz (w przykładzie około 6 s); kolejne żądania trwały 0,02 do 0,06 s.
 
 Co warto wiedzieć w trybie stateful:
 
@@ -192,6 +212,24 @@ Co warto wiedzieć w trybie stateful:
 - Sesja, której bramka już nie zna (wygasła albo zginęła przy restarcie), dostaje `404`, na co specyfikacja MCP każe klientowi odpowiedzieć nową sesją. Tak działa kod supergateway; nie sprawdzono tego tu na kliencie Claude. Pierwsze `initialize` nowej sesji płaci koszt startu ponownie.
 - Każda sesja trzyma własny proces opakowywanego serwera aż do `GATEWAY_SESSION_TIMEOUT_MS` bezczynności. Klienci otwierają też krótkie sesje-sondy, które nigdy nie są ponownie używane, więc procesy i pamięć narastają przez czas limitu (zaobserwowano na jednym wdrożeniu: 15 linii `mcp-server-docker` w `docker top` i około 490 MiB dla kontenera). Sprawdzisz to przez `docker top <kontener>` i `docker stats --no-stream <kontener>`.
 - Krótszy limit szybciej zwalnia pamięć, ale sprawia, że nowe sesje, a z nimi wolne `initialize`, zdarzają się częściej. Skracaj go tylko wtedy, gdy faktycznie widzisz narastanie procesów.
+
+### Tryb współdzielonej sesji
+
+Tryb stateful daje jeden proces opakowywanego serwera na *sesję* klienta. Klient Claude otwiera jednak **nową sesję przy każdym wywołaniu narzędzia** (zaobserwowano na `unifi/`: trzy wywołania, trzy `initialize`, trzy starty serwera, trzy logowania). Dla serwera logującego się przy starcie sam tryb stateful nie oznacza więc „jednego logowania”, tylko jedno logowanie na wywołanie, a seria wywołań nadal może trafić w limit logowań.
+
+`GATEWAY_SHARED_SESSION=true` (razem z `GATEWAY_STATEFUL=true`) to zmienia. Proxy otwiera jedną sesję upstream przy pierwszym użyciu i ją trzyma:
+
+- każde `initialize` klienta jest obsługiwane z zapamiętanego wyniku `initialize` upstream (z nowym losowym `Mcp-Session-Id`, który proxy ignoruje w kolejnych żądaniach);
+- każde żądanie idzie przez wspólną sesję upstream; identyfikatory JSON-RPC są zamieniane na unikalne `gw-N` i przywracane w odpowiedzi, więc równoległe zapytania nie dostaną cudzych odpowiedzi;
+- jeśli sesja upstream zniknie (404 albo 400 wspominające sesję), proxy otwiera nową i ponawia żądanie raz.
+
+Ograniczenia, wprost:
+
+- Wszyscy klienci dzielą jedną sesję, a więc jeden stan opakowywanego serwera. Dobre dla connectora jednego użytkownika za tokenem; złe dla czegokolwiek, co wymaga stanu per klient.
+- Brak wiadomości inicjowanych przez serwer: `GET /mcp` zwraca `405`, `DELETE /mcp` zwraca `204` i **nie** jest przekazywane (klient zamykający swoją sesję nie może zabić wspólnej).
+- Sesja upstream jest otwierana z wersją protokołu pierwszego klienta.
+- Testy jednostkowe (`gateway/test-shared-session.js`) działają na atrapie stateful upstream. Zgodność z prawdziwym supergateway nie została sprawdzona w CI; wdrożenie zweryfikujesz w logu kontenera: kilka wywołań narzędzi ma dać **jeden** start/logowanie opakowywanego serwera.
+- Domyślnie wyłączone; usuń zmienną, żeby wrócić do zwykłego stateful.
 
 ### Token
 
