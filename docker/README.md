@@ -2,6 +2,11 @@
 
 *([Polska wersja poniżej ↓](#polski))*
 
+> **Want smaller tool results and a shorter tool list?** [`../docker-lite/`](../docker-lite/README.md)
+> is a compact, read-only replacement written for this repo (`ps`, `logs` with
+> `tail`/`since`/`grep`/size budget, `inspect`). Use it instead of this connector, not
+> next to it.
+
 Wraps [`ckreiling/mcp-server-docker`](https://github.com/ckreiling/mcp-server-docker), pinned
 to the commit in [`UPSTREAM_REF`](UPSTREAM_REF), and adds [`supergateway`](https://github.com/supercorp-ai/supergateway)
 to expose it as streamable-HTTP. The bearer token is checked by the shared front end in
@@ -116,6 +121,11 @@ add it to your MCP client as `https://<your-host>/mcp` with
 
 *([English version above ↑](#docker-connector))*
 
+> **Chcesz mniejsze wyniki narzędzi i krótszą listę narzędzi?** [`../docker-lite/`](../docker-lite/README.md)
+> to zwarty zamiennik tylko do odczytu, napisany na potrzeby tego repo (`ps`, `logs` z
+> `tail`/`since`/`grep`/budżetem rozmiaru, `inspect`). Używaj go zamiast tego connectora,
+> a nie obok.
+
 Opakowuje [`ckreiling/mcp-server-docker`](https://github.com/ckreiling/mcp-server-docker),
 przypięty do commita w [`UPSTREAM_REF`](UPSTREAM_REF), i dokleja
 [`supergateway`](https://github.com/supercorp-ai/supergateway), żeby wystawić go jako
@@ -176,7 +186,7 @@ Z `GATEWAY_STATEFUL=true` proces startuje raz na sesję: pierwsze `initialize` w
 trwa pełny czas startu, a kolejne żądania trwały 0,02 do 0,06 s. Domyślnie zostaje `false`,
 bo na szybkim hoście tryb stateless działa i nie ma sesji, które mogą wygasać albo się
 kumulować. Szczegóły (nagłówek `Mcp-Session-Id`, którego potrzebuje ręcznie napisany test,
-co się dzieje po wygaśnięciu sesji, jak obserwować narastanie procesów) są w
+co się dzieje po wygasłnięciu sesji, jak obserwować narastanie procesów) są w
 [README bramki](../gateway/README.md#stateless-or-stateful), razem ze
 [skryptem pełnego handshake](../gateway/README.md#full-handshake-works-in-both-modes).
 
