@@ -1,0 +1,22 @@
+# docker-lite: Node-only image. No upstream build step, no Python: the wrapped MCP server is
+# docker-lite/server.js (core modules only). supergateway 4.1.0 needs Node >= 20.
+ARG SUPERGATEWAY_VERSION=4.1.0
+
+FROM node:22-slim
+ARG SUPERGATEWAY_VERSION
+RUN npm install -g "supergateway@${SUPERGATEWAY_VERSION}" \
+    && node --version \
+    && supergateway --help > /dev/null
+
+# Shared authenticating front end (see gateway/README.md). Build context = repository root.
+COPY gateway/ /app/gateway/
+COPY docker-lite/server.js /app/docker-lite/server.js
+RUN chmod +x /app/gateway/entrypoint.sh \
+    && node --check /app/docker-lite/server.js
+
+# Stateless is fine here: the server starts in milliseconds and keeps no state.
+ENV GATEWAY_STDIO_CMD="node /app/docker-lite/server.js" \
+    GATEWAY_STATEFUL="false"
+
+ENTRYPOINT []
+CMD ["/app/gateway/entrypoint.sh"]

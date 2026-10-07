@@ -1,0 +1,50 @@
+name: build-docker-lite-connector
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'docker-lite/**'
+      - 'gateway/**'
+      - '.github/workflows/build-docker-lite.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test the docker-lite server
+        run: node docker-lite/test-server.js
+
+      # The build stops here if the shared front end stops enforcing the token.
+      - name: Test the authenticating proxy
+        run: node gateway/test-proxy.js
+
+      - name: Test that supergateway's port is pinned to loopback
+        run: node gateway/test-loopback.js
+
+      - name: Test the entrypoint
+        run: bash gateway/test-entrypoint.sh
+
+      - id: image
+        run: echo "repo=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push gateway
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker-lite/Dockerfile.gateway
+          push: true
+          tags: |
+            ${{ steps.image.outputs.repo }}/docker-lite:latest
+            ${{ steps.image.outputs.repo }}/docker-lite:${{ github.sha }}
