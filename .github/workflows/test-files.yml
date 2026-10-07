@@ -1,0 +1,37 @@
+name: test-files-policy
+# Checks for changes to the files connector, including pull requests. Builds and pushes
+# nothing; the image is built by build-files.yml on master.
+on:
+  pull_request:
+    paths:
+      - 'files/**'
+      - '.github/workflows/test-files.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Test the access policy logic
+        run: node files/test-deny-policy.js
+
+      - name: Test the policy proxy against a fake file server
+        run: node files/test-deny-proxy.js
+
+      # The real server, at the version the image is built with. Fails when upstream has a
+      # tool that deny-policy.js does not know, or when the policy leaks in front of it.
+      - name: Install the pinned upstream server
+        run: npm install -g "@modelcontextprotocol/server-filesystem@$(cat files/UPSTREAM_REF)"
+
+      - name: Test the policy in front of the real server
+        run: node files/test-deny-upstream.js
+        env:
+          REQUIRE_UPSTREAM: '1'
