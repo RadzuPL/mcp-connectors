@@ -11,9 +11,14 @@ RUN npm install -g "@modelcontextprotocol/server-filesystem@${MCP_FS_VERSION}" "
 COPY gateway/ /app/gateway/
 RUN chmod +x /app/gateway/entrypoint.sh
 
+# Optional access policy in front of the file server (see files/README.md): hides and
+# refuses paths such as secrets.yaml. It does nothing unless DENY_NAMES, ALLOW_ONLY or
+# READ_ONLY is set when the container starts; then the server runs behind it.
+COPY files/deny-policy.js files/deny-proxy.js /app/files/
+
 # ALLOWED_DIRS is set when the container is started; the escaped $ keeps it literal here,
 # and the shell that supergateway runs the command in expands it.
-ENV GATEWAY_STDIO_CMD="mcp-server-filesystem \$ALLOWED_DIRS" \
+ENV GATEWAY_STDIO_CMD="node /app/files/deny-proxy.js mcp-server-filesystem \$ALLOWED_DIRS" \
     GATEWAY_STATEFUL="false"
 
 ENTRYPOINT []

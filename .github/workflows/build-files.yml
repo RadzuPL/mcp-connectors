@@ -6,6 +6,7 @@ on:
     paths:
       - 'files/UPSTREAM_REF'
       - 'files/Dockerfile.gateway'
+      - 'files/*.js'
       - 'gateway/**'
       - '.github/workflows/build-files.yml'
 
@@ -30,6 +31,13 @@ jobs:
 
       - name: Test the entrypoint
         run: bash gateway/test-entrypoint.sh
+
+      # The build also stops if the access policy (DENY_NAMES / ALLOW_ONLY / READ_ONLY) breaks.
+      - name: Test the access policy logic
+        run: node files/test-deny-policy.js
+
+      - name: Test the policy proxy against a fake file server
+        run: node files/test-deny-proxy.js
 
       - id: pin
         run: |
