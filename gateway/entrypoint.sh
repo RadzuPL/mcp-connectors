@@ -17,6 +17,10 @@
 #                               Needed by servers that log in to something on start.
 #                               Default: false.
 #   GATEWAY_SESSION_TIMEOUT_MS  inactivity timeout of a stateful session. Default 1800000.
+#   GATEWAY_SHARED_SESSION      "true" makes the proxy funnel every client into ONE stateful
+#                               session (one wrapped-server process, one login), instead of
+#                               one session per client connection. Requires GATEWAY_STATEFUL.
+#                               Default: false.
 #   MCP_BEARER_TOKEN_FILE / MCP_BEARER_TOKEN / MCP_ALLOW_PATH_TOKEN
 #                               read by auth-proxy.js (see gateway/README.md)
 #   LISTEN_PORT (8000) / UPSTREAM_PORT (8001)
@@ -61,7 +65,21 @@ case "$(printf '%s' "${GATEWAY_STATEFUL:-false}" | tr '[:upper:]' '[:lower:]')" 
     ;;
 esac
 
-node "${APP_DIR}/auth-proxy.js" &
+# Shared-session mode (see shared-session.js): the proxy keeps ONE upstream session for
+# every client. It needs a stateful supergateway, because only a stateful one hands out
+# the session id the proxy reuses; without it the mode is switched off, with a warning.
+SHARED_MODE=false
+case "$(printf '%s' "${GATEWAY_SHARED_SESSION:-false}" | tr '[:upper:]' '[:lower:]')" in
+  true | 1 | yes)
+    if [ "${#STATE_ARGS[@]}" -gt 0 ]; then
+      SHARED_MODE=true
+    else
+      echo "entrypoint: WARNING: GATEWAY_SHARED_SESSION needs a stateful supergateway (GATEWAY_STATEFUL=true and a supergateway with --stateful); running without it" >&2
+    fi
+    ;;
+esac
+
+env GATEWAY_SHARED_SESSION="${SHARED_MODE}" node "${APP_DIR}/auth-proxy.js" &
 PROXY_PID=$!
 
 env ${SG_ENV[@]+"${SG_ENV[@]}"} supergateway --stdio "${STDIO_CMD}" --outputTransport streamableHttp \
