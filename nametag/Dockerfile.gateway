@@ -1,0 +1,10 @@
+ARG SUPERGATEWAY_VERSION=4.1.0
+FROM node:22-slim
+ARG SUPERGATEWAY_VERSION
+RUN npm install -g "supergateway@${SUPERGATEWAY_VERSION}" && node --version && supergateway --help > /dev/null
+COPY gateway/ /app/gateway/
+COPY nametag/server.js /app/nametag/server.js
+RUN chmod +x /app/gateway/entrypoint.sh && node --check /app/nametag/server.js
+ENV GATEWAY_STDIO_CMD="node /app/nametag/server.js" GATEWAY_STATEFUL="false"
+ENTRYPOINT []
+CMD ["/app/gateway/entrypoint.sh"]
