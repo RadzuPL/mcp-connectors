@@ -2,7 +2,7 @@
 
 *([Polska wersja poniżej ↓](#polski))*
 
-Every connector image in this repo (`docker/`, `files/`, `metrics/`, `unifi/`) runs the same small front end. It lives here once, and each connector's Dockerfile copies it into its image.
+Every connector image in this repo (`docker/`, `docker-lite/`, `files/`, `metrics/`, `nametag/`, `unifi/`) runs the same small front end. It lives here once, and each connector's Dockerfile copies it into its image.
 
 ## Why it exists
 
@@ -151,7 +151,7 @@ bash gateway/test-entrypoint.sh
 
 *([English version above ↑](#gateway-the-shared-authenticating-front-of-every-connector))*
 
-Każdy obraz connectora w tym repo (`docker/`, `files/`, `metrics/`, `unifi/`) uruchamia ten sam mały front. Leży tu raz, a Dockerfile każdego connectora kopiuje go do swojego obrazu.
+Każdy obraz connectora w tym repo (`docker/`, `docker-lite/`, `files/`, `metrics/`, `nametag/`, `unifi/`) uruchamia ten sam mały front. Leży tu raz, a Dockerfile każdego connectora kopiuje go do swojego obrazu.
 
 ### Dlaczego istnieje
 
