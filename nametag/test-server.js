@@ -40,6 +40,7 @@ const state = {
   journal: [],
   calls: [],
   badAuth: 0,
+  trash: { people: [], groups: [] },
 };
 let seq = 0;
 const typeById = (id) => state.types.find((x) => x.id === id);
@@ -81,6 +82,7 @@ function linkRows(personId, relatedId, typeId, notes) {
 }
 
 function reset() {
+  state.trash = { people: [], groups: [] };
   state.people = [
     makePerson({
       id: 'per_ola',
@@ -178,6 +180,30 @@ const api = http.createServer((req, res) => {
       return send(res, 201, { template: t });
     }
 
+    // ---- trash
+    if (m === 'GET' && p === '/api/deleted') {
+      const type = url.searchParams.get('type');
+      if (type === 'people') return send(res, 200, { deleted: state.trash.people.map((t) => ({ id: t.item.id, name: t.item.name, surname: t.item.surname, nickname: t.item.nickname, deletedAt: t.deletedAt })), retentionDays: 30 });
+      if (type === 'groups') return send(res, 200, { deleted: state.trash.groups.map((t) => ({ id: t.item.id, name: t.item.name, description: t.item.description, color: t.item.color, deletedAt: t.deletedAt })), retentionDays: 30 });
+      return send(res, 400, { error: 'Invalid type parameter' });
+    }
+    mm = p.match(/^\/api\/(people|groups)\/([^/]+)\/restore$/);
+    if (mm && m === 'POST') {
+      const list = state.trash[mm[1]];
+      const i = list.findIndex((t) => t.item.id === mm[2]);
+      if (i < 0) return send(res, 400, { error: mm[1] === 'people' ? 'Person is not deleted' : 'Group is not deleted' });
+      const [t] = list.splice(i, 1);
+      if (mm[1] === 'people') state.people.push(t.item);
+      else {
+        state.groups.push(t.item);
+        for (const id of t.memberIds) {
+          const x = personById(id);
+          if (x && !x.groups.some((mem) => mem.group.id === t.item.id)) x.groups.push({ group: { id: t.item.id, name: t.item.name } });
+        }
+      }
+      return send(res, 200, mm[1] === 'people' ? { person: t.item } : { group: t.item });
+    }
+
     // ---- groups
     mm = p.match(/^\/api\/groups\/([^/]+)$/);
     if (mm) {
@@ -195,6 +221,7 @@ const api = http.createServer((req, res) => {
       if (m === 'DELETE') {
         state.deletePeople = url.searchParams.get('deletePeople') === 'true';
         state.groups = state.groups.filter((x) => x.id !== g.id);
+        state.trash.groups.push({ item: g, memberIds: state.people.filter((x) => x.groups.some((mem) => mem.group.id === g.id)).map((x) => x.id), deletedAt: new Date().toISOString() });
         for (const x of state.people) x.groups = x.groups.filter((mem) => mem.group.id !== g.id);
         return send(res, 200, { message: 'Group deleted successfully' });
       }
@@ -267,6 +294,7 @@ const api = http.createServer((req, res) => {
       if (o.lastContact !== undefined) a.lastContact = o.lastContact ? iso(o.lastContact) : null;
       for (const g of b.groups) if (!a.groups.some((x) => x.group.id === g.group.id)) a.groups.push(g);
       state.people = state.people.filter((x) => x.id !== b.id);
+      state.trash.people.push({ item: b, deletedAt: new Date().toISOString() });
       return send(res, 200, { mergedInto: a.id });
     }
     mm = p.match(/^\/api\/people\/([^/]+)$/);
@@ -276,6 +304,7 @@ const api = http.createServer((req, res) => {
       if (m === 'GET') return send(res, 200, { person: x });
       if (m === 'DELETE') {
         state.people = state.people.filter((y) => y.id !== x.id);
+        state.trash.people.push({ item: x, deletedAt: new Date(Date.now() - (x.id === 'per_cez' ? 3 : 0) * 86400000).toISOString() });
         return send(res, 200, { message: 'Person deleted successfully' });
       }
       if (m === 'PUT') {
@@ -449,10 +478,10 @@ async function t(name, fn) {
   }
 }
 
-const READ_TOOLS = ['catalog', 'find_people', 'get_person', 'journal'];
+const READ_TOOLS = ['catalog', 'find_people', 'get_person', 'journal', 'trash'];
 const WRITE_TOOLS = [
   'add_journal', 'add_person', 'create_custom_field', 'create_group', 'create_relationship_type', 'delete_group', 'delete_journal',
-  'link_people', 'set_relationship', 'tag_people', 'unlink_people', 'untag_people', 'update_group', 'update_journal', 'update_link', 'update_person',
+  'link_people', 'restore', 'set_relationship', 'tag_people', 'unlink_people', 'untag_people', 'update_group', 'update_journal', 'update_link', 'update_person',
 ];
 const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
 
@@ -511,7 +540,7 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     const r = await ro.call('add_person', { name: 'Zed', relationship: 'Friend' });
     assert.ok(r.isError);
     assert.ok(/disabled/.test(r.text));
-    for (const name of ['delete_person', 'merge_people', 'update_journal', 'delete_group']) {
+    for (const name of ['delete_person', 'merge_people', 'update_journal', 'delete_group', 'restore']) {
       const x = await ro.call(name, { id: 'per_ola', primary: 'per_ola', secondary: 'per_bob', group: 'RPG' });
       assert.ok(x.isError && /disabled/.test(x.text), x.text);
     }
@@ -606,6 +635,11 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(r.text.includes('Aleksandra [per_ola]'), r.text);
     assert.ok(r.text.includes('Bob Budowniczy [per_bob]'), r.text);
     assert.ok(!r.text.includes('(no name)'), r.text);
+  });
+  await t('trash is a read tool and lists nothing when nothing was deleted', async () => {
+    const r = await ro.call('trash');
+    assert.ok(!r.isError && r.text.includes('people (0)') && r.text.includes('groups (0)'), r.text);
+    assert.ok((await ro.call('trash', { type: 'journal' })).isError);
   });
   await t('only GET requests left the process in read-only mode', async () => {
     assert.ok(state.calls.length > 0);
@@ -903,6 +937,29 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.strictEqual(state.people.length, before);
     assert.ok((await rw.call('delete_group', { group: 'Szachy' })).isError);
   });
+  await t('restore brings a deleted group back with its members; trash shows it meanwhile', async () => {
+    state.trash.groups.length = 0; // the earlier delete_group test left one behind
+    await rw.call('create_group', { name: 'Szachy', description: 'x' });
+    await rw.call('tag_people', { ids: ['per_cez'], groups: ['Szachy'] });
+    await rw.call('delete_group', { group: 'Szachy' });
+    const tr = await rw.call('trash', { type: 'group' });
+    assert.ok(tr.text.includes('groups (1)') && tr.text.includes('Szachy') && tr.text.includes('30') && !tr.text.includes('people ('), tr.text);
+    const r = await rw.call('restore', { type: 'group', id: 'szachy' });
+    assert.ok(!r.isError && r.text.includes('restored group grp_new') && r.text.includes('members'), r.text);
+    assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'POST', p: '/api/groups/grp_new/restore' });
+    assert.ok(state.groups.some((g) => g.id === 'grp_new'));
+    assert.ok(state.people.find((x) => x.id === 'per_cez').groups.some((g) => g.group.id === 'grp_new'), 'membership is back');
+    const again = await rw.call('restore', { type: 'group', id: 'Szachy' });
+    assert.ok(again.isError && again.text.includes('nothing in the trash'), again.text);
+    await rw.call('delete_group', { group: 'Szachy' });
+    state.trash.groups.length = 0;
+  });
+  await t('restore refuses a bad type or an empty id and sends nothing', async () => {
+    state.calls.length = 0;
+    assert.ok((await rw.call('restore', { type: 'journal', id: 'jr_1' })).isError);
+    assert.ok((await rw.call('restore', { type: 'person', id: ' ' })).isError);
+    assert.ok(!state.calls.some((c) => c.method === 'POST'));
+  });
   await t('link_people needs a type and resolves its label', async () => {
     const none = await rw.call('link_people', { person: 'per_cez', related: 'per_bob' });
     assert.ok(none.isError && none.text.includes('type is required'), none.text);
@@ -1058,6 +1115,29 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(state.people.length === 2, 'nobody else was deleted');
     assert.ok((await dx.call('delete_person', { id: 'per_cez' })).isError);
     assert.ok((await dx.call('delete_person', { id: '../x' })).isError);
+  });
+  await t('trash lists a deleted person with its age, restore brings it back by name or id', async () => {
+    const tr = await dx.call('trash', { type: 'person' });
+    assert.ok(tr.text.includes('people (1)') && tr.text.includes('per_cez | Cezary') && /\| 27$/m.test(tr.text), tr.text);
+    const byName = await dx.call('restore', { type: 'person', id: 'cezary' });
+    assert.ok(!byName.isError && byName.text.includes('restored person per_cez: Cezary'), byName.text);
+    assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'POST', p: '/api/people/per_cez/restore' });
+    assert.ok(state.people.some((x) => x.id === 'per_cez'));
+    assert.ok((await dx.call('restore', { type: 'person', id: 'per_cez' })).isError, 'not in the trash any more');
+    await dx.call('delete_person', { id: 'per_cez' });
+    const byId = await dx.call('restore', { type: 'person', id: 'per_cez' });
+    assert.ok(!byId.isError, byId.text);
+  });
+  await t('restore with an ambiguous name asks for the id', async () => {
+    state.trash.people.push(
+      { item: makePerson({ id: 'per_t1', name: 'Zdublowany' }), deletedAt: new Date().toISOString() },
+      { item: makePerson({ id: 'per_t2', name: 'Zdublowany' }), deletedAt: new Date().toISOString() }
+    );
+    const r = await dx.call('restore', { type: 'person', id: 'Zdublowany' });
+    assert.ok(r.isError && r.text.includes('per_t1') && r.text.includes('per_t2') && r.text.includes('pass the id'), r.text);
+    const ok = await dx.call('restore', { type: 'person', id: 'per_t2' });
+    assert.ok(!ok.isError && state.people.some((x) => x.id === 'per_t2'), ok.text);
+    state.trash.people.length = 0;
   });
   await t('merge_people combines aliases, notes and the later last contact instead of losing them', async () => {
     state.people.push(

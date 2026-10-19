@@ -1039,7 +1039,7 @@ async function toolDeleteGroup(args) {
   const members = (cur.people || []).length;
   // Never with deletePeople: the people stay, only the tag goes.
   await request('DELETE', `/api/groups/${enc(g.id)}`);
-  return `deleted group ${g.id} "${g.name}"; its ${members} member(s) keep their records and only lose this tag (Nametag keeps deleted groups for 30 days)`;
+  return `deleted group ${g.id} "${g.name}"; its ${members} member(s) keep their records and only lose this tag (Nametag keeps deleted groups for 30 days; see trash, bring back with restore)`;
 }
 
 // Finds the link(s) between two people from the first person's side.
@@ -1130,6 +1130,66 @@ async function toolCreateCustomField(args) {
   return `created custom field ${t.id || '?'}: ${t.name || name} (${type}${options.length ? `: ${options.join(', ')}` : ''})`;
 }
 
+// ------------------------------------------------------------------- trash
+
+const TRASH_KINDS = {
+  person: { api: 'people', label: 'people', route: (id) => `/api/people/${enc(id)}/restore`, name: displayName },
+  group: { api: 'groups', label: 'groups', route: (id) => `/api/groups/${enc(id)}/restore`, name: (g) => str(g && g.name) || '(no name)' },
+};
+
+async function loadTrash(kind) {
+  const r = await get(`/api/deleted${qs({ type: TRASH_KINDS[kind].api })}`);
+  return { items: r.deleted || [], days: Number.isFinite(r.retentionDays) ? r.retentionDays : 30 };
+}
+
+function daysLeft(item, days) {
+  const t = Date.parse(item && item.deletedAt);
+  if (!Number.isFinite(t)) return '?';
+  return String(Math.max(0, days - Math.floor((Date.now() - t) / 86400000)));
+}
+
+async function toolTrash(args) {
+  const t = norm(str(args.type).trim());
+  const kinds = !t ? ['person', 'group'] : t.startsWith('person') || t === 'people' ? ['person'] : t.startsWith('group') ? ['group'] : null;
+  if (!kinds) throw new ToolError('type must be person or group (or omitted for both)');
+  const parts = [];
+  let days = 30;
+  for (const kind of kinds) {
+    const k = TRASH_KINDS[kind];
+    const tr = await loadTrash(kind);
+    days = tr.days;
+    const rows = tr.items.map((x) => {
+      const nick = kind === 'person' && x.nickname ? ` "${oneLine(x.nickname, 60)}"` : '';
+      return `${x.id} | ${k.name(x)}${nick} | ${day(x.deletedAt)} | ${daysLeft(x, tr.days)}`;
+    });
+    parts.push(`${k.label} (${rows.length})` + (rows.length ? '\nid | name | deleted | days left\n' + rows.join('\n') : ''));
+  }
+  return cap(`trash (Nametag keeps deleted items ${days} days)\n` + parts.join('\n'));
+}
+
+async function toolRestore(args) {
+  const type = norm(str(args.type).trim());
+  const kind = type.startsWith('person') || type === 'people' ? 'person' : type.startsWith('group') ? 'group' : null;
+  if (!kind) throw new ToolError('type must be person or group');
+  const want = str(args.id).trim();
+  if (!want) throw new ToolError('id is required: an id or the exact name, both from trash');
+  const k = TRASH_KINDS[kind];
+  const { items } = await loadTrash(kind);
+  let hit = items.filter((x) => x.id === want);
+  if (!hit.length) hit = items.filter((x) => norm(k.name(x)) === norm(want));
+  if (!hit.length) throw new ToolError(`nothing in the trash (${k.label}) matches "${oneLine(want, 80)}"; see trash`);
+  if (hit.length > 1) {
+    throw new ToolError(`${hit.length} ${k.label} in the trash have that name (${hit.map((x) => `${x.id} deleted ${day(x.deletedAt)}`).join('; ')}); pass the id`);
+  }
+  const item = hit[0];
+  await request('POST', k.route(item.id));
+  const extra =
+    kind === 'person'
+      ? 'it is back as it was when deleted. If it was merged into another person, the data that moved stays on that person'
+      : 'it is back with the members it had when deleted';
+  return `restored ${kind} ${item.id}: ${k.name(item)}; ${extra}`;
+}
+
 // ------------------------------------------------------- destructive tools
 
 async function toolDeletePerson(args) {
@@ -1137,7 +1197,7 @@ async function toolDeletePerson(args) {
   const p = await loadPerson(id);
   // Explicit body: people only connected through this one are left alone, CardDAV is not touched.
   await request('DELETE', `/api/people/${enc(id)}`, { deleteOrphans: false, orphanIds: [], deleteFromCardDav: false });
-  return `deleted ${id}: ${displayName(p)}. Nametag keeps deleted people for 30 days (restore through its trash); nobody else was deleted, journal entries stay`;
+  return `deleted ${id}: ${displayName(p)}. Nametag keeps deleted people for 30 days (see trash, bring back with restore); nobody else was deleted, journal entries stay`;
 }
 
 function aliasList(s) {
@@ -1232,6 +1292,12 @@ const TOOLS = [
       properties: { person: s('person id'), q: s(), page: { type: 'integer' } },
     },
     run: toolJournal,
+  },
+  {
+    name: 'trash',
+    description: 'Deleted people and groups still in Nametag\'s trash (kept 30 days), with ids and days left. Use restore to bring one back.',
+    inputSchema: { type: 'object', properties: { type: s('person or group; default both') } },
+    run: toolTrash,
   },
   {
     name: 'add_person',
@@ -1353,6 +1419,17 @@ const TOOLS = [
     write: true,
     inputSchema: { type: 'object', properties: { group: s('group name or id') }, required: ['group'] },
     run: toolDeleteGroup,
+  },
+  {
+    name: 'restore',
+    description: 'Bring a deleted person or group back from the trash (see trash). Journal entries cannot be restored.',
+    write: true,
+    inputSchema: {
+      type: 'object',
+      properties: { type: s('person or group'), id: s('id or exact name, from trash') },
+      required: ['type', 'id'],
+    },
+    run: toolRestore,
   },
   {
     name: 'link_people',
@@ -1504,7 +1581,7 @@ async function handleRequest(msg) {
       return {
         protocolVersion: (msg.params && msg.params.protocolVersion) || '2025-03-26',
         capabilities: { tools: {} },
-        serverInfo: { name: 'nametag', version: '1.1.0' },
+        serverInfo: { name: 'nametag', version: '1.2.0' },
       };
     case 'ping':
       return {};
