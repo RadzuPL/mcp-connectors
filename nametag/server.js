@@ -288,10 +288,6 @@ function day(iso) {
   return iso ? String(iso).slice(0, 10) : '';
 }
 
-function personRow(p, extra) {
-  return [p.id, displayName(p), p.nickname ? `"${oneLine(p.nickname, 60)}"` : '', extra || ''].join(' | ');
-}
-
 // -------------------------------------------------------------- resolvers
 
 async function loadGroups() {
@@ -416,16 +412,9 @@ async function toolFindPeople(args) {
   const groupLabel = groupLookup ? groupIds.map((gid) => (groupLookup.groups.find((g) => g.id === gid) || {}).name || gid).join(everyGroup ? ' + ' : ' | ') : '';
   const relType = relArg ? await resolveRelType(relArg) : null;
 
-  // Plain name/nickname search through the API.
-  if (q && !groupIds.length && !relType) {
-    const r = await get(`/api/people/search${qs({ q })}`);
-    const rows = (r.people || []).slice(0, limit);
-    if (!rows.length) return `0 people match "${q}" in names or nicknames. Try deep=true to search notes, groups and custom fields.`;
-    return cap(`${rows.length} match(es) for "${q}" in names/nicknames\nid | name | nickname\n` + rows.map((p) => personRow(p)).join('\n'));
-  }
-
   // Listing, narrowed by group (any of them, or all of them) and relation, and by name when q is given.
-  // Only the groups are filtered by the server (any-of); the rest is filtered here.
+  // Only the groups are filtered by the server (any-of); the rest is filtered here. A name search
+  // goes through the same path, so every result has the same columns.
   const local = Boolean(q || relType || (everyGroup && groupIds.length > 1));
   let rows;
   let total;
@@ -453,7 +442,7 @@ async function toolFindPeople(args) {
     q ? `matching "${q}"` : '',
   ].filter(Boolean);
   const head = `${rows.length} of ${total} people${filters.length ? ` ${filters.join(', ')}` : ''}` + (more ? `; more: offset=${offset + rows.length}` : '');
-  if (!rows.length) return head;
+  if (!rows.length) return q && !groupIds.length && !relType ? `${head}. Try deep=true to search notes, groups and custom fields.` : head;
   return cap(
     `${head}\nid | name | nickname | relation | groups\n` +
       rows.map((p) => [p.id, displayName(p), p.nickname ? `"${oneLine(p.nickname, 60)}"` : '', relationLabel(p), groupNames(p).join(', ')].join(' | ')).join('\n')

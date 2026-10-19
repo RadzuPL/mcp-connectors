@@ -521,6 +521,13 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     const r = await ro.call('find_people', { q: 'ola' });
     assert.ok(r.text.includes('per_ola'), r.text);
   });
+  await t('find_people by name has the same columns as a listing (relation, groups)', async () => {
+    const r = await ro.call('find_people', { q: 'lukasiewicz' });
+    assert.ok(r.text.includes('id | name | nickname | relation | groups'), r.text);
+    assert.ok(r.text.includes('per_ola') && r.text.includes('Friend') && r.text.includes('RPG'), r.text);
+    const none = await ro.call('find_people', { q: 'nikt taki' });
+    assert.ok(none.text.startsWith('0 of 0 people') && none.text.includes('deep=true'), none.text);
+  });
   await t('find_people with group filters via groupIds', async () => {
     const r = await ro.call('find_people', { group: 'rpg' });
     assert.ok(r.text.includes('per_ola') && !r.text.includes('per_bob'), r.text);
