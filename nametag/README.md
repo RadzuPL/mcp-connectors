@@ -22,6 +22,7 @@ Always available:
 | `get_person` | one person in full: names, nickname, groups, custom fields, contact data, dates, relations (with the relationship type), notes |
 | `catalog` | existing groups, relationship types and custom field templates, with ids |
 | `journal` | journal entries, newest first, tagged people as `name [id]`. Args: `person`, `q`, `page` |
+| `trash` | deleted people and groups still in Nametag's trash (kept 30 days), with ids and days left. Arg: `type` (`person` or `group`, default both) |
 
 Only with `NAMETAG_ENABLE_WRITE=true`:
 
@@ -32,6 +33,7 @@ Only with `NAMETAG_ENABLE_WRITE=true`:
 | `tag_people` / `untag_people` | add up to 100 people to groups (RPG, LARP, ...) / remove them from groups; people and groups stay |
 | `set_relationship` | sets your relationship type (Poznany, Znajomy, ...) for up to 100 people at once |
 | `create_group` / `update_group` / `delete_group` | create, rename / change description or color, delete a group. Deleting removes the tag only, never its members |
+| `restore` | brings a deleted person or group back from the trash, by id or exact name (see `trash`) |
 | `link_people` / `update_link` / `unlink_people` | connect two people with a relationship type (required), change the type or notes of a link, remove a link (the inverse follows) |
 | `create_relationship_type` / `create_custom_field` | new relationship type (`symmetric`, `inverse_label` or `inverse`), new custom field template (TEXT, NUMBER, BOOLEAN, SELECT) |
 | `add_journal` / `update_journal` / `delete_journal` | add an entry, edit title / body / date / tagged people, delete an entry. Last contact dates are touched only when asked |
@@ -43,7 +45,7 @@ Only with `NAMETAG_ENABLE_WRITE=true` **and** `NAMETAG_ENABLE_DESTRUCTIVE=true`:
 | `delete_person` | deletes one person (Nametag keeps it 30 days). Never deletes anyone else, never touches CardDAV |
 | `merge_people` | merges a duplicate into the person you keep; aliases and notes are combined, the later last contact date wins |
 
-Not included on purpose: permanent deletion (every `/permanent` route is blocked in the
+Deleted people and groups can be brought back with `restore` for 30 days. Not included on purpose: permanent deletion (every `/permanent` route is blocked in the
 request layer), bulk deletion, import/export, accounts and tokens. Deleted journal entries
 cannot be restored by Nametag; `delete_journal` returns the whole entry so it can be re-added
 with `add_journal`.
@@ -195,6 +197,7 @@ Zawsze dostępne:
 | `get_person` | jedna osoba w całości: imiona, ksywa, grupy, pola własne, kontakt, daty, powiązania (z typem relacji), notatki |
 | `catalog` | istniejące grupy, typy relacji i szablony pól własnych, z id |
 | `journal` | wpisy dziennika od najnowszych, oznaczone osoby jako `imię [id]`. Argumenty: `person`, `q`, `page` |
+| `trash` | usunięte osoby i grupy, które są jeszcze w koszu Nametaga (30 dni), z id i liczbą dni do skasowania. Argument: `type` (`person` albo `group`, domyślnie obie) |
 
 Tylko z `NAMETAG_ENABLE_WRITE=true`:
 
@@ -205,6 +208,7 @@ Tylko z `NAMETAG_ENABLE_WRITE=true`:
 | `tag_people` / `untag_people` | dodaje do 100 osób do grup (RPG, LARP, ...) / wyjmuje je z grup; osoby i grupy zostają |
 | `set_relationship` | ustawia Twój typ relacji (Poznany, Znajomy, ...) do 100 osobom naraz |
 | `create_group` / `update_group` / `delete_group` | tworzy, zmienia nazwę / opis / kolor, usuwa grupę. Usunięcie kasuje sam tag, nigdy jej członków |
+| `restore` | przywraca usuniętą osobę lub grupę z kosza, po id albo dokładnej nazwie (zobacz `trash`) |
 | `link_people` / `update_link` / `unlink_people` | łączy dwie osoby typem relacji (wymagany), zmienia typ albo notatkę powiązania, usuwa powiązanie (odwrotna strona idzie razem) |
 | `create_relationship_type` / `create_custom_field` | nowy typ relacji (`symmetric`, `inverse_label` albo `inverse`), nowy szablon pola własnego (TEXT, NUMBER, BOOLEAN, SELECT) |
 | `add_journal` / `update_journal` / `delete_journal` | dodaje wpis, edytuje tytuł / treść / datę / oznaczone osoby, usuwa wpis. Daty ostatniego kontaktu zmieniane są tylko na prośbę |
@@ -216,7 +220,7 @@ Tylko z `NAMETAG_ENABLE_WRITE=true` **i** `NAMETAG_ENABLE_DESTRUCTIVE=true`:
 | `delete_person` | usuwa jedną osobę (Nametag trzyma ją 30 dni). Nigdy nie usuwa nikogo innego i nie rusza CardDAV |
 | `merge_people` | scala duplikat z osobą, którą zostawiasz; ksywy i notatki są łączone, wygrywa późniejsza data ostatniego kontaktu |
 
-Celowo brak: trwałego usuwania (każda ścieżka `/permanent` jest blokowana w warstwie
+Usuniętą osobę lub grupę można przez 30 dni przywrócić przez `restore`. Celowo brak: trwałego usuwania (każda ścieżka `/permanent` jest blokowana w warstwie
 zapytań), usuwania zbiorczego, importu/eksportu, kont i tokenów. Nametag nie potrafi
 przywrócić usuniętego wpisu dziennika; `delete_journal` zwraca cały wpis, żeby dało się go
 dodać z powrotem przez `add_journal`.
