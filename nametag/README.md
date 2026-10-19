@@ -9,7 +9,8 @@ behind the same authenticating front end as the other connectors
 answers with short plain text instead of raw API objects, to keep the context small.
 
 **Read-only by default.** Write tools exist but are not even advertised until you set
-`NAMETAG_ENABLE_WRITE=true`.
+`NAMETAG_ENABLE_WRITE=true`. Deleting a person and merging people need a second switch,
+`NAMETAG_ENABLE_DESTRUCTIVE=true`, on top of that.
 
 ## Tools
 
@@ -17,25 +18,35 @@ Always available:
 
 | Tool | Returns |
 |---|---|
-| `find_people` | `id \| name \| nickname` lines. Args: `q` (names and nicknames, accent-insensitive: `lukasz` finds `Łukasz`), `deep` (also searches notes, groups and custom fields, with a snippet), `group` (name or id), `limit` (default 30, max 100), `offset` |
+| `find_people` | `id \| name \| nickname \| relation \| groups` lines. Args: `q` (names and nicknames, accent-insensitive: `lukasz` finds `Łukasz`), `deep` (also searches notes, groups and custom fields, with a snippet), `group` / `groups` (names or ids; any of them, or all with `all_groups=true`), `relationship` (only people with that relation to you, e.g. `Nie znam`), `limit` (default 30, max 100), `offset` |
 | `get_person` | one person in full: names, nickname, groups, custom fields, contact data, dates, relations (with the relationship type), notes |
 | `catalog` | existing groups, relationship types and custom field templates, with ids |
-| `journal` | journal entries, newest first. Args: `person`, `q`, `page` |
+| `journal` | journal entries, newest first, tagged people as `name [id]`. Args: `person`, `q`, `page` |
 
 Only with `NAMETAG_ENABLE_WRITE=true`:
 
 | Tool | Does |
 |---|---|
-| `add_person` | creates a person; groups and custom fields by name; refuses a name that already exists unless `allow_duplicate=true` |
-| `update_person` | changes only the fields you pass; `add_nickname` adds an alias, `append_notes` appends to the notes, `custom_fields` sets only the named fields |
-| `tag_people` | adds up to 100 people to groups (RPG, LARP, ...); only adds, never removes |
-| `create_group` | creates a group (a tag), refuses an existing name |
-| `link_people` | connects two people, optionally with a relationship type (Nametag adds the inverse itself) |
-| `add_journal` | adds a journal entry, optionally tagging people |
+| `add_person` | creates a person; `relationship` (your relation to them) is required; groups and custom fields by name; `met_through` needs `met_through_type`; refuses a name that already exists unless `allow_duplicate=true` |
+| `update_person` | changes only the fields you pass: `add_nickname`, `append_notes`, `custom_fields`, `relationship` (your relation), `last_contact` (`YYYY-MM-DD`, empty clears), `add_phones` / `add_emails` / `add_urls`, `remove_contact`, `add_dates` / `remove_dates` |
+| `tag_people` / `untag_people` | add up to 100 people to groups (RPG, LARP, ...) / remove them from groups; people and groups stay |
+| `set_relationship` | sets your relationship type (Poznany, Znajomy, ...) for up to 100 people at once |
+| `create_group` / `update_group` / `delete_group` | create, rename / change description or color, delete a group. Deleting removes the tag only, never its members |
+| `link_people` / `update_link` / `unlink_people` | connect two people with a relationship type (required), change the type or notes of a link, remove a link (the inverse follows) |
+| `create_relationship_type` / `create_custom_field` | new relationship type (`symmetric`, `inverse_label` or `inverse`), new custom field template (TEXT, NUMBER, BOOLEAN, SELECT) |
+| `add_journal` / `update_journal` / `delete_journal` | add an entry, edit title / body / date / tagged people, delete an entry. Last contact dates are touched only when asked |
 
-Not included on purpose: deleting anything, merging people, import/export, accounts and
-tokens, and removing people from groups. Nametag's own soft delete (30 days) is not
-reachable from here.
+Only with `NAMETAG_ENABLE_WRITE=true` **and** `NAMETAG_ENABLE_DESTRUCTIVE=true`:
+
+| Tool | Does |
+|---|---|
+| `delete_person` | deletes one person (Nametag keeps it 30 days). Never deletes anyone else, never touches CardDAV |
+| `merge_people` | merges a duplicate into the person you keep; aliases and notes are combined, the later last contact date wins |
+
+Not included on purpose: permanent deletion (every `/permanent` route is blocked in the
+request layer), bulk deletion, import/export, accounts and tokens. Deleted journal entries
+cannot be restored by Nametag; `delete_journal` returns the whole entry so it can be re-added
+with `add_journal`.
 
 ## Things the server handles for you
 
@@ -46,8 +57,17 @@ pass-through:
   deleted). The server reads the current values, merges yours in and sends the full list, so
   setting one field never wipes the others. Values are validated first (select options,
   numbers, true/false, no empty values).
-- **Group membership** is added through Nametag's additive bulk action, never through the
-  person update, which would replace the whole set.
+- **Group membership** is added through Nametag's additive bulk action and removed one
+  membership at a time, never through the person update, which would replace the whole set.
+- **Contact lists** (phones, emails, URLs) are replaced as a whole too, so the server reads
+  the current ones, merges your change in and sends only the lists that changed. Important
+  dates use Nametag's own add / delete routes.
+- **Group and journal edits** need the full object on Nametag's side (a missing description
+  or a missing list of tagged people is wiped). The server reads the current state and sends
+  it back with your change.
+- **Your relation to a person** is its own field. Creating a person with `connectedThroughId`
+  makes Nametag drop that relation, so `met_through` is done as a separate typed link after
+  the person exists (a failure there is reported as a warning, the person stays).
 - **Nickname is one field, max 100 chars.** Several aliases are kept comma separated
   (`add_nickname` appends one and refuses to go past the limit).
 - **Notes** are Markdown, max 10000 chars. `append_notes` refuses to overflow and points to
@@ -86,6 +106,7 @@ your Nametag; keep the client list short and the tunnel locked down (see
 | `NAMETAG_URL` | yes | `http://nametag:3000` or `http://192.168.10.15:3033` | where *this container* can reach Nametag. Same Docker network: container name and **internal** port (`http://nametag:3000`). Different networks (the usual case when the connector sits next to the tunnel): host IP and the **published** port (`http://<host-ip>:3033`) |
 | `NAMETAG_API_TOKEN_FILE` | yes (or `NAMETAG_API_TOKEN`) | `/run/secrets/nametag_api_token` | the `ntag_...` token from Nametag |
 | `NAMETAG_ENABLE_WRITE` | no | `true` | default off. Needs a READ_WRITE token |
+| `NAMETAG_ENABLE_DESTRUCTIVE` | no | `true` | default off. Only has an effect together with `NAMETAG_ENABLE_WRITE`; unlocks `delete_person` and `merge_people` |
 | `MCP_BEARER_TOKEN_FILE` | yes (or `MCP_BEARER_TOKEN`) | `/run/secrets/mcp_bearer_token` | see the [gateway README](../gateway/README.md#token) |
 
 Image: `ghcr.io/<owner>/mcp-connectors/nametag:latest`, built by
@@ -111,7 +132,7 @@ Image: `ghcr.io/<owner>/mcp-connectors/nametag:latest`, built by
 
 On Unraid, add the container through *Docker > Add Container*: repository
 `ghcr.io/<owner>/mcp-connectors/nametag:latest`, the network of the tunnel, extra
-parameter `--restart unless-stopped`, the four variables from the table above and two
+parameter `--restart unless-stopped`, the variables from the table above and two
 read-only path mappings (the bearer token file to `/run/secrets/mcp_bearer_token`, the
 Nametag token file to `/run/secrets/nametag_api_token`).
 
@@ -140,9 +161,11 @@ node nametag/test-server.js
 ```
 
 Runs the server against a fake Nametag API (also in CI before the image is built). The
-response shapes are taken from Nametag's OpenAPI document and source (0.63/0.64). Only
-`catalog` has been checked against a live Nametag (0.64.1); the other tools were checked
-against the OpenAPI document, the source and the fake API. If a newer Nametag changes the
+fake reproduces the Nametag behaviours the server works around (replace-on-update, required
+relationship type, wiped description). The response shapes are taken from Nametag's OpenAPI
+document and source (0.63/0.64). Only `catalog` and the read tools have been checked against a
+live Nametag (0.64.1); the write tools were checked against the source and the fake API, so
+test them on a throwaway person first. If a newer Nametag changes the
 shapes, `get_person` and `find_people` are the first places to look.
 
 ---
@@ -159,7 +182,8 @@ REST API Nametaga przez token API i odpowiada krótkim tekstem zamiast surowych 
 żeby kontekst był mały.
 
 **Domyślnie tylko do odczytu.** Narzędzia zapisu istnieją, ale nie są nawet ogłaszane,
-dopóki nie ustawisz `NAMETAG_ENABLE_WRITE=true`.
+dopóki nie ustawisz `NAMETAG_ENABLE_WRITE=true`. Usuwanie osoby i scalanie osób wymaga
+dodatkowo drugiego przełącznika, `NAMETAG_ENABLE_DESTRUCTIVE=true`.
 
 ### Narzędzia
 
@@ -167,24 +191,35 @@ Zawsze dostępne:
 
 | Narzędzie | Zwraca |
 |---|---|
-| `find_people` | linie `id \| imię \| ksywa`. Argumenty: `q` (imiona i ksywy, bez względu na ogonki: `lukasz` znajdzie `Łukasz`), `deep` (szuka też w notatkach, grupach i polach własnych, z wycinkiem), `group` (nazwa lub id), `limit` (domyślnie 30, max 100), `offset` |
+| `find_people` | linie `id \| imię \| ksywa \| relacja \| grupy`. Argumenty: `q` (imiona i ksywy, bez względu na ogonki: `lukasz` znajdzie `Łukasz`), `deep` (szuka też w notatkach, grupach i polach własnych, z wycinkiem), `group` / `groups` (nazwy lub id; dowolna z nich, albo wszystkie z `all_groups=true`), `relationship` (tylko osoby z taką relacją do Ciebie, np. `Nie znam`), `limit` (domyślnie 30, max 100), `offset` |
 | `get_person` | jedna osoba w całości: imiona, ksywa, grupy, pola własne, kontakt, daty, powiązania (z typem relacji), notatki |
 | `catalog` | istniejące grupy, typy relacji i szablony pól własnych, z id |
-| `journal` | wpisy dziennika od najnowszych. Argumenty: `person`, `q`, `page` |
+| `journal` | wpisy dziennika od najnowszych, oznaczone osoby jako `imię [id]`. Argumenty: `person`, `q`, `page` |
 
 Tylko z `NAMETAG_ENABLE_WRITE=true`:
 
 | Narzędzie | Robi |
 |---|---|
-| `add_person` | tworzy osobę; grupy i pola własne po nazwie; odmawia, jeśli taka osoba już istnieje (chyba że `allow_duplicate=true`) |
-| `update_person` | zmienia tylko podane pola; `add_nickname` dopisuje ksywę, `append_notes` dopisuje do notatek, `custom_fields` ustawia tylko wskazane pola |
-| `tag_people` | dodaje do 100 osób do grup (RPG, LARP, ...); tylko dodaje, nigdy nie usuwa |
-| `create_group` | tworzy grupę (tag), odmawia istniejącej nazwy |
-| `link_people` | łączy dwie osoby, opcjonalnie typem relacji (odwrotną stronę dodaje sam Nametag) |
-| `add_journal` | dodaje wpis do dziennika, opcjonalnie z osobami |
+| `add_person` | tworzy osobę; `relationship` (Twoja relacja do niej) jest wymagana; grupy i pola własne po nazwie; `met_through` wymaga `met_through_type`; odmawia, jeśli taka osoba już istnieje (chyba że `allow_duplicate=true`) |
+| `update_person` | zmienia tylko podane pola: `add_nickname`, `append_notes`, `custom_fields`, `relationship` (Twoja relacja), `last_contact` (`YYYY-MM-DD`, puste czyści), `add_phones` / `add_emails` / `add_urls`, `remove_contact`, `add_dates` / `remove_dates` |
+| `tag_people` / `untag_people` | dodaje do 100 osób do grup (RPG, LARP, ...) / wyjmuje je z grup; osoby i grupy zostają |
+| `set_relationship` | ustawia Twój typ relacji (Poznany, Znajomy, ...) do 100 osobom naraz |
+| `create_group` / `update_group` / `delete_group` | tworzy, zmienia nazwę / opis / kolor, usuwa grupę. Usunięcie kasuje sam tag, nigdy jej członków |
+| `link_people` / `update_link` / `unlink_people` | łączy dwie osoby typem relacji (wymagany), zmienia typ albo notatkę powiązania, usuwa powiązanie (odwrotna strona idzie razem) |
+| `create_relationship_type` / `create_custom_field` | nowy typ relacji (`symmetric`, `inverse_label` albo `inverse`), nowy szablon pola własnego (TEXT, NUMBER, BOOLEAN, SELECT) |
+| `add_journal` / `update_journal` / `delete_journal` | dodaje wpis, edytuje tytuł / treść / datę / oznaczone osoby, usuwa wpis. Daty ostatniego kontaktu zmieniane są tylko na prośbę |
 
-Celowo brak: usuwania czegokolwiek, scalania osób, importu/eksportu, kont i tokenów oraz
-wyjmowania osób z grup. Miękkie usuwanie Nametaga (30 dni) nie jest stąd dostępne.
+Tylko z `NAMETAG_ENABLE_WRITE=true` **i** `NAMETAG_ENABLE_DESTRUCTIVE=true`:
+
+| Narzędzie | Robi |
+|---|---|
+| `delete_person` | usuwa jedną osobę (Nametag trzyma ją 30 dni). Nigdy nie usuwa nikogo innego i nie rusza CardDAV |
+| `merge_people` | scala duplikat z osobą, którą zostawiasz; ksywy i notatki są łączone, wygrywa późniejsza data ostatniego kontaktu |
+
+Celowo brak: trwałego usuwania (każda ścieżka `/permanent` jest blokowana w warstwie
+zapytań), usuwania zbiorczego, importu/eksportu, kont i tokenów. Nametag nie potrafi
+przywrócić usuniętego wpisu dziennika; `delete_journal` zwraca cały wpis, żeby dało się go
+dodać z powrotem przez `add_journal`.
 
 ### Co serwer robi za Ciebie
 
@@ -195,8 +230,17 @@ przelotką:
   kasowane). Serwer czyta obecne wartości, dokłada Twoje i wysyła pełną listę, więc ustawienie
   jednego pola nie wymazuje pozostałych. Wartości są wcześniej walidowane (opcje select,
   liczby, true/false, brak pustych wartości).
-- **Członkostwo w grupach** jest dodawane przez addytywną akcję zbiorczą Nametaga, nigdy
-  przez aktualizację osoby, która podmieniłaby cały zestaw.
+- **Członkostwo w grupach** jest dodawane przez addytywną akcję zbiorczą Nametaga, a
+  usuwane pojedynczo, nigdy przez aktualizację osoby, która podmieniłaby cały zestaw.
+- **Listy kontaktowe** (telefony, maile, adresy URL) Nametag też podmienia w całości, więc
+  serwer czyta obecne, dokłada Twoją zmianę i wysyła tylko zmienione listy. Ważne daty idą
+  przez własne ścieżki Nametaga (dodaj / usuń).
+- **Edycja grupy i wpisu dziennika** wymaga po stronie Nametaga pełnego obiektu (brak opisu
+  albo brak listy oznaczonych osób to ich skasowanie). Serwer czyta obecny stan i odsyła go
+  razem z Twoją zmianą.
+- **Twoja relacja do osoby** to osobne pole. Utworzenie osoby z `connectedThroughId` każe
+  Nametagowi tę relację porzucić, więc `met_through` jest robione jako osobne, otypowane
+  powiązanie już po utworzeniu osoby (błąd tutaj to ostrzeżenie, osoba zostaje).
 - **Ksywa to jedno pole, max 100 znaków.** Kilka aliasów trzymane jest po przecinku
   (`add_nickname` dopisuje jeden i odmawia przekroczenia limitu).
 - **Notatki** to Markdown, max 10000 znaków. `append_notes` nie pozwoli przepełnić i
@@ -234,6 +278,7 @@ Nametaga; trzymaj listę klientów krótką, a tunel zamknięty (zobacz
 | `NAMETAG_URL` | tak | `http://nametag:3000` albo `http://192.168.10.15:3033` | adres, pod którym *ten kontener* widzi Nametaga. Ta sama sieć Dockera: nazwa kontenera i **wewnętrzny** port (`http://nametag:3000`). Różne sieci (typowo, gdy konektor stoi obok tunelu): IP hosta i port **opublikowany** (`http://<ip-hosta>:3033`) |
 | `NAMETAG_API_TOKEN_FILE` | tak (albo `NAMETAG_API_TOKEN`) | `/run/secrets/nametag_api_token` | token `ntag_...` z Nametaga |
 | `NAMETAG_ENABLE_WRITE` | nie | `true` | domyślnie wyłączone. Wymaga tokenu READ_WRITE |
+| `NAMETAG_ENABLE_DESTRUCTIVE` | nie | `true` | domyślnie wyłączone. Działa tylko razem z `NAMETAG_ENABLE_WRITE`; odblokowuje `delete_person` i `merge_people` |
 | `MCP_BEARER_TOKEN_FILE` | tak (albo `MCP_BEARER_TOKEN`) | `/run/secrets/mcp_bearer_token` | zobacz [README bramki](../gateway/README.md#token) |
 
 Obraz: `ghcr.io/<owner>/mcp-connectors/nametag:latest`, budowany przez
@@ -259,7 +304,7 @@ Obraz: `ghcr.io/<owner>/mcp-connectors/nametag:latest`, budowany przez
 
 Na Unraidzie kontener dodajesz przez *Docker > Add Container*: repozytorium
 `ghcr.io/<owner>/mcp-connectors/nametag:latest`, sieć tunelu, dodatkowy parametr
-`--restart unless-stopped`, cztery zmienne z tabeli powyżej i dwa mapowania ścieżek tylko do
+`--restart unless-stopped`, zmienne z tabeli powyżej i dwa mapowania ścieżek tylko do
 odczytu (plik z tokenem bearer do `/run/secrets/mcp_bearer_token`, plik z tokenem Nametaga do
 `/run/secrets/nametag_api_token`).
 
@@ -287,8 +332,10 @@ Pierwsze musi zwrócić `401`, drugie `200` z Twoimi grupami. Odpowiedź zaczyna
 node nametag/test-server.js
 ```
 
-Uruchamia serwer na fałszywym API Nametaga (w CI także przed zbudowaniem obrazu). Kształty
-odpowiedzi pochodzą z dokumentu OpenAPI i źródeł Nametaga (0.63/0.64). Na żywym Nametagu
-(0.64.1) sprawdzono dotąd tylko `catalog`; pozostałe narzędzia sprawdzono względem dokumentu
-OpenAPI, źródeł i fałszywego API. Jeśli nowsza wersja zmieni kształty, pierwsze do
+Uruchamia serwer na fałszywym API Nametaga (w CI także przed zbudowaniem obrazu). Fałszywe
+API odtwarza zachowania Nametaga, które serwer obchodzi (podmiana przy aktualizacji, wymagany
+typ relacji, kasowany opis). Kształty odpowiedzi pochodzą z dokumentu OpenAPI i źródeł
+Nametaga (0.63/0.64). Na żywym Nametagu (0.64.1) sprawdzono dotąd tylko `catalog` i
+narzędzia odczytu; narzędzia zapisu sprawdzono względem źródeł i fałszywego API, więc
+przetestuj je najpierw na tymczasowej osobie. Jeśli nowsza wersja zmieni kształty, pierwsze do
 sprawdzenia są `get_person` i `find_people`.
