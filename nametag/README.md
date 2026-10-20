@@ -31,7 +31,7 @@ Only with `NAMETAG_ENABLE_WRITE=true`:
 | `add_person` | creates a person; `relationship` (your relation to them) is required; groups and custom fields by name; `met_through` needs `met_through_type`; refuses a name that already exists unless `allow_duplicate=true` |
 | `update_person` | changes only the fields you pass: `add_nickname`, `append_notes`, `custom_fields`, `relationship` (your relation), `last_contact` (`YYYY-MM-DD`, empty clears), `add_phones` / `add_emails` / `add_urls`, `remove_contact`, `add_dates` / `remove_dates` |
 | `tag_people` / `untag_people` | add up to 100 people to groups (RPG, LARP, ...) / remove them from groups; people and groups stay |
-| `set_relationship` | sets your relationship type (Poznany, Znajomy, ...) for up to 100 people at once |
+| `set_relationship` | sets your relationship type (Acquaintance, Friend, ...) for up to 100 people at once |
 | `create_group` / `update_group` / `delete_group` | create, rename / change description or color, delete a group. Deleting removes the tag only, never its members |
 | `restore` | brings a deleted person or group back from the trash, by id or exact name (see `trash`) |
 | `link_people` / `update_link` / `unlink_people` | connect two people with a relationship type (required), change the type or notes of a link, remove a link (the inverse follows) |
@@ -207,7 +207,7 @@ Tylko z `NAMETAG_ENABLE_WRITE=true`:
 | `add_person` | tworzy osobę; `relationship` (Twoja relacja do niej) jest wymagana; grupy i pola własne po nazwie; `met_through` wymaga `met_through_type`; odmawia, jeśli taka osoba już istnieje (chyba że `allow_duplicate=true`) |
 | `update_person` | zmienia tylko podane pola: `add_nickname`, `append_notes`, `custom_fields`, `relationship` (Twoja relacja), `last_contact` (`YYYY-MM-DD`, puste czyści), `add_phones` / `add_emails` / `add_urls`, `remove_contact`, `add_dates` / `remove_dates` |
 | `tag_people` / `untag_people` | dodaje do 100 osób do grup (RPG, LARP, ...) / wyjmuje je z grup; osoby i grupy zostają |
-| `set_relationship` | ustawia Twój typ relacji (Poznany, Znajomy, ...) do 100 osobom naraz |
+| `set_relationship` | ustawia Twój typ relacji (Acquaintance, Friend, ...) do 100 osobom naraz |
 | `create_group` / `update_group` / `delete_group` | tworzy, zmienia nazwę / opis / kolor, usuwa grupę. Usunięcie kasuje sam tag, nigdy jej członków |
 | `restore` | przywraca usuniętą osobę lub grupę z kosza, po id albo dokładnej nazwie (zobacz `trash`) |
 | `link_people` / `update_link` / `unlink_people` | łączy dwie osoby typem relacji (wymagany), zmienia typ albo notatkę powiązania, usuwa powiązanie (odwrotna strona idzie razem) |

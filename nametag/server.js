@@ -1265,7 +1265,7 @@ const TOOLS = [
         group: s('group name or id'),
         groups: { ...idArray, description: 'several group names or ids' },
         all_groups: { type: 'boolean', description: 'with several groups: only people in all of them' },
-        relationship: s('relationship type label, e.g. only "Nie znam"'),
+        relationship: s('relationship type label, e.g. only "Stranger"'),
         limit: { type: 'integer', description: 'default 30, max 100' },
         offset: { type: 'integer', description: 'for listings' },
       },
@@ -1382,7 +1382,7 @@ const TOOLS = [
   },
   {
     name: 'set_relationship',
-    description: 'Set YOUR relationship type (e.g. Poznany, Znajomy) for up to 100 people at once.',
+    description: 'Set YOUR relationship type (e.g. Acquaintance, Friend) for up to 100 people at once.',
     write: true,
     inputSchema: {
       type: 'object',

@@ -20,21 +20,21 @@ const iso = (d) => `${d}T00:00:00.000Z`;
 // ------------------------------------------------------------------ fake API
 const state = {
   groups: [
-    { id: 'grp_rpg', name: 'RPG', description: 'sesje', color: '#112233' },
+    { id: 'grp_rpg', name: 'RPG', description: 'sessions', color: '#112233' },
     { id: 'grp_larp', name: 'LARP', description: '', color: null },
-    { id: 'grp_post', name: 'Postapo', description: '' },
+    { id: 'grp_post', name: 'Wasteland', description: '' },
   ],
   types: [
     { id: 'rt_friend', label: 'Friend', name: 'FRIEND', inverseId: 'rt_friend' },
     { id: 'rt_mg', label: 'Game Master', name: 'GM', inverseId: 'rt_player' },
     { id: 'rt_player', label: 'Player', name: 'PLAYER', inverseId: 'rt_mg' },
-    { id: 'rt_nie', label: 'Nie znam', name: 'NIE_ZNAM', inverseId: 'rt_nie' },
-    { id: 'rt_pozn', label: 'Poznany', name: 'POZNANY', inverseId: 'rt_pozn' },
+    { id: 'rt_stranger', label: 'Stranger', name: 'STRANGER', inverseId: 'rt_stranger' },
+    { id: 'rt_acq', label: 'Acquaintance', name: 'ACQUAINTANCE', inverseId: 'rt_acq' },
   ],
   templates: [
-    { id: 'tpl_from', name: 'Skąd znam', slug: 'skad-znam', type: 'TEXT', options: [] },
-    { id: 'tpl_lvl', name: 'Zaufanie', slug: 'zaufanie', type: 'SELECT', options: ['niskie', 'średnie', 'wysokie'] },
-    { id: 'tpl_num', name: 'Wiek', slug: 'wiek', type: 'NUMBER', options: [] },
+    { id: 'tpl_from', name: 'Met at', slug: 'met-at', type: 'TEXT', options: [] },
+    { id: 'tpl_lvl', name: 'Trust', slug: 'trust', type: 'SELECT', options: ['low', 'medium', 'high'] },
+    { id: 'tpl_num', name: 'Age', slug: 'age', type: 'NUMBER', options: [] },
   ],
   people: [],
   journal: [],
@@ -87,39 +87,40 @@ function reset() {
     makePerson({
       id: 'per_ola',
       name: 'Aleksandra',
+      // Non-ASCII on purpose: the accent-insensitive search tests rely on it.
       surname: 'Łukasiewicz',
       nickname: 'Ola',
-      notes: 'Poznana na konwencie Pyrkon. Prowadzi sesje Warhammera.',
+      notes: 'Met at a convention. Runs Warhammer sessions.',
       rel: 'rt_friend',
       lastContact: iso('2026-10-16'),
       groups: ['grp_rpg'],
-      customFieldValues: [{ templateId: 'tpl_from', value: 'Pyrkon 2019', template: { name: 'Skąd znam' } }],
+      customFieldValues: [{ templateId: 'tpl_from', value: 'Con 2019', template: { name: 'Met at' } }],
       phoneNumbers: [{ type: 'mobile', number: '+48 600 100 200' }],
-      urls: [{ type: 'profile', url: 'https://erpego.example/ola' }],
+      urls: [{ type: 'profile', url: 'https://rpg.example/ola' }],
       importantDates: [{ id: 'dt_1', type: 'birthday', title: '', date: iso('1990-05-04') }],
     }),
-    makePerson({ id: 'per_bob', name: 'Bob', surname: 'Budowniczy', nickname: 'Builder, Bobo', notes: 'Postapo LARP w kopalni', rel: 'rt_nie' }),
-    makePerson({ id: 'per_cez', name: 'Cezary', rel: 'rt_nie' }),
+    makePerson({ id: 'per_bob', name: 'Bob', surname: 'Brown', nickname: 'Builder, Bobo', notes: 'Wasteland LARP in a mine', rel: 'rt_stranger' }),
+    makePerson({ id: 'per_cez', name: 'Cezary', rel: 'rt_stranger' }),
   ];
-  linkRows('per_ola', 'per_bob', 'rt_player', 'z sesji');
+  linkRows('per_ola', 'per_bob', 'rt_player', 'from a session');
   state.journal = [
     {
       id: 'jr_1',
       date: iso('2026-05-01'),
       hasTime: false,
-      title: 'Pyrkon',
-      body: 'Spotkanie z Olą',
+      title: 'Convention',
+      body: 'Met Ola at the convention',
       people: [{ journalEntryId: 'jr_1', personId: 'per_ola', person: { id: 'per_ola', name: 'Aleksandra', surname: null } }],
     },
     {
       id: 'jr_2',
       date: iso('2026-06-02'),
       hasTime: false,
-      title: 'Sesja',
-      body: 'Grali do rana',
+      title: 'Session',
+      body: 'Played until dawn',
       people: [
         { journalEntryId: 'jr_2', personId: 'per_ola', person: { id: 'per_ola', name: 'Aleksandra', surname: null } },
-        { journalEntryId: 'jr_2', personId: 'per_bob', person: { id: 'per_bob', name: 'Bob', surname: 'Budowniczy' } },
+        { journalEntryId: 'jr_2', personId: 'per_bob', person: { id: 'per_bob', name: 'Bob', surname: 'Brown' } },
       ],
     },
   ];
@@ -571,16 +572,16 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(r.text.includes('id | name | nickname | relation | groups'), r.text);
     assert.ok(r.text.includes('Friend'), r.text);
   });
-  await t('find_people keeps one relation ("who is Nie znam")', async () => {
-    const r = await ro.call('find_people', { relationship: 'nie znam' });
+  await t('find_people keeps one relation ("who is Stranger")', async () => {
+    const r = await ro.call('find_people', { relationship: 'stranger' });
     assert.ok(r.text.includes('per_bob') && r.text.includes('per_cez') && !r.text.includes('per_ola'), r.text);
-    assert.ok(r.text.includes('with relation "Nie znam"'), r.text);
-    const both = await ro.call('find_people', { relationship: 'nie znam', q: 'bob' });
+    assert.ok(r.text.includes('with relation "Stranger"'), r.text);
+    const both = await ro.call('find_people', { relationship: 'stranger', q: 'bob' });
     assert.ok(both.text.includes('per_bob') && !both.text.includes('per_cez'), both.text);
   });
   await t('find_people with an unknown relation lists the types', async () => {
-    const r = await ro.call('find_people', { relationship: 'Wróg' });
-    assert.ok(r.isError && r.text.includes('Nie znam'), r.text);
+    const r = await ro.call('find_people', { relationship: 'Enemy' });
+    assert.ok(r.isError && r.text.includes('Stranger'), r.text);
   });
   await t('find_people with several groups: any of them, or all of them', async () => {
     state.people.find((x) => x.id === 'per_bob').groups.push({ group: { id: 'grp_larp', name: 'LARP' } });
@@ -593,12 +594,12 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   });
   await t('unknown group is explained', async () => {
     const r = await ro.call('find_people', { group: 'Szachy' });
-    assert.ok(r.isError && r.text.includes('RPG, LARP, Postapo'), r.text);
+    assert.ok(r.isError && r.text.includes('RPG, LARP, Wasteland'), r.text);
   });
   await t('deep search finds notes and shows a snippet', async () => {
-    const r = await ro.call('find_people', { q: 'kopalni', deep: true });
+    const r = await ro.call('find_people', { q: 'mine', deep: true });
     assert.ok(r.text.includes('per_bob') && r.text.includes('notes'), r.text);
-    const r2 = await ro.call('find_people', { q: 'pyrkon', deep: true });
+    const r2 = await ro.call('find_people', { q: 'convention', deep: true });
     assert.ok(r2.text.includes('per_ola'), r2.text);
   });
   await t('deep search with no hit says so', async () => {
@@ -608,8 +609,8 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   await t('get_person shows relation type label, groups and custom fields', async () => {
     const r = await ro.call('get_person', { id: 'per_ola' });
     assert.ok(r.text.includes('groups: RPG'), r.text);
-    assert.ok(r.text.includes('Skąd znam=Pyrkon 2019'), r.text);
-    assert.ok(r.text.includes('Player -> Bob Budowniczy (per_bob)'), r.text);
+    assert.ok(r.text.includes('Met at=Con 2019'), r.text);
+    assert.ok(r.text.includes('Player -> Bob Brown (per_bob)'), r.text);
     assert.ok(r.text.includes('last contact: 2026-10-16') && r.text.includes('relation to you: Friend'), r.text);
   });
   await t('get_person rejects a malformed id without calling the API', async () => {
@@ -624,16 +625,16 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   });
   await t('catalog lists groups, types and fields', async () => {
     const r = await ro.call('catalog');
-    assert.ok(r.text.includes('grp_rpg | RPG') && r.text.includes('Game Master') && r.text.includes('Zaufanie | SELECT | niskie, średnie, wysokie'), r.text);
+    assert.ok(r.text.includes('grp_rpg | RPG') && r.text.includes('Game Master') && r.text.includes('Trust | SELECT | low, medium, high'), r.text);
   });
   await t('journal lists entries', async () => {
-    const r = await ro.call('journal', { q: 'Pyrkon' });
-    assert.ok(r.text.includes('jr_1') && r.text.includes('Pyrkon'), r.text);
+    const r = await ro.call('journal', { q: 'Convention' });
+    assert.ok(r.text.includes('jr_1') && r.text.includes('Convention'), r.text);
   });
   await t('journal shows tagged people by name and id (join rows, not "(no name)")', async () => {
     const r = await ro.call('journal');
     assert.ok(r.text.includes('Aleksandra [per_ola]'), r.text);
-    assert.ok(r.text.includes('Bob Budowniczy [per_bob]'), r.text);
+    assert.ok(r.text.includes('Bob Brown [per_bob]'), r.text);
     assert.ok(!r.text.includes('(no name)'), r.text);
   });
   await t('trash is a read tool and lists nothing when nothing was deleted', async () => {
@@ -684,44 +685,44 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   await t('add_person needs a relationship to you and says which types exist', async () => {
     state.calls.length = 0;
     const r = await rw.call('add_person', { name: 'Dawid' });
-    assert.ok(r.isError && r.text.includes('relationship is required') && r.text.includes('Nie znam'), r.text);
+    assert.ok(r.isError && r.text.includes('relationship is required') && r.text.includes('Stranger'), r.text);
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('add_person sends the relation to you, anniversary/lastContact null, groups by name', async () => {
-    const r = await rw.call('add_person', { name: 'Dawid', surname: 'Nowy', nickname: 'Dave', groups: ['rpg', 'LARP'], notes: 'Z Pyrkonu', relationship: 'poznany' });
-    assert.ok(!r.isError && r.text.startsWith('created per_new') && r.text.includes('relation: Poznany'), r.text);
+    const r = await rw.call('add_person', { name: 'Dawid', surname: 'Nowy', nickname: 'Dave', groups: ['rpg', 'LARP'], notes: 'From the convention', relationship: 'acquaintance' });
+    assert.ok(!r.isError && r.text.startsWith('created per_new') && r.text.includes('relation: Acquaintance'), r.text);
     const w = lastWrite();
     assert.strictEqual(w.path, '/api/people');
     assert.strictEqual(w.body.anniversary, null);
     assert.strictEqual(w.body.lastContact, null);
-    assert.strictEqual(w.body.relationshipToUserId, 'rt_pozn');
+    assert.strictEqual(w.body.relationshipToUserId, 'rt_acq');
     assert.deepStrictEqual(w.body.groupIds, ['grp_rpg', 'grp_larp']);
     assert.strictEqual(w.body.connectedThroughId, undefined);
   });
   await t('add_person met_through keeps the relation to you and adds a typed link afterwards', async () => {
     state.calls.length = 0;
-    const r = await rw.call('add_person', { name: 'Ewa', relationship: 'Znam', met_through: 'per_bob', met_through_type: 'Friend' });
+    const r = await rw.call('add_person', { name: 'Ewa', relationship: 'Nonexistent type', met_through: 'per_bob', met_through_type: 'Friend' });
     assert.ok(r.isError, 'unknown relation label must fail before anything is created');
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
-    const ok = await rw.call('add_person', { name: 'Ewa', relationship: 'Nie znam', met_through: 'per_bob', met_through_type: 'Friend' });
+    const ok = await rw.call('add_person', { name: 'Ewa', relationship: 'Stranger', met_through: 'per_bob', met_through_type: 'Friend' });
     assert.ok(!ok.isError && ok.text.includes('linked to per_bob as Friend'), ok.text);
     const posts = writes();
     assert.strictEqual(posts[0].path, '/api/people');
     assert.strictEqual(posts[0].body.connectedThroughId, undefined, 'connectedThroughId would make Nametag drop the relation to you');
-    assert.strictEqual(posts[0].body.relationshipToUserId, 'rt_nie');
+    assert.strictEqual(posts[0].body.relationshipToUserId, 'rt_stranger');
     assert.strictEqual(posts[1].path, '/api/relationships');
     assert.strictEqual(posts[1].body.relationshipTypeId, 'rt_friend');
     const ewa = state.people.find((x) => x.name === 'Ewa');
-    assert.strictEqual(ewa.relationshipToUser.label, 'Nie znam');
+    assert.strictEqual(ewa.relationshipToUser.label, 'Stranger');
   });
   await t('add_person met_through without met_through_type fails before creating anything', async () => {
     state.calls.length = 0;
-    const r = await rw.call('add_person', { name: 'Filip', relationship: 'Nie znam', met_through: 'per_bob' });
+    const r = await rw.call('add_person', { name: 'Filip', relationship: 'Stranger', met_through: 'per_bob' });
     assert.ok(r.isError && r.text.includes('met_through_type'), r.text);
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('add_person: a failing link is a warning, the person still exists', async () => {
-    const r = await rw.call('add_person', { name: 'Gosia', relationship: 'Nie znam', met_through: 'per_gone', met_through_type: 'Friend' });
+    const r = await rw.call('add_person', { name: 'Gosia', relationship: 'Stranger', met_through: 'per_gone', met_through_type: 'Friend' });
     assert.ok(!r.isError && r.text.startsWith('created per_new') && r.text.includes('WARNING') && r.text.includes('per_gone'), r.text);
   });
   await t('add_person refuses a duplicate and does not POST', async () => {
@@ -747,23 +748,23 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.deepStrictEqual(w.body, { surname: 'Czerwony' });
   });
   await t('update_person custom_fields merges with existing values (no wipe)', async () => {
-    const r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Zaufanie: 'WYSOKIE' } });
+    const r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Trust: 'HIGH' } });
     assert.ok(!r.isError, r.text);
     const w = lastWrite();
     const vals = Object.fromEntries(w.body.customFieldValues.map((v) => [v.templateId, v.value]));
-    assert.strictEqual(vals.tpl_from, 'Pyrkon 2019');
-    assert.strictEqual(vals.tpl_lvl, 'wysokie');
+    assert.strictEqual(vals.tpl_from, 'Con 2019');
+    assert.strictEqual(vals.tpl_lvl, 'high');
     assert.strictEqual(Object.keys(w.body).length, 1);
   });
   await t('custom field validation: select option, number, empty', async () => {
-    let r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Zaufanie: 'kosmiczne' } });
-    assert.ok(r.isError && r.text.includes('niskie, średnie, wysokie'), r.text);
-    r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Wiek: 'abc' } });
+    let r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Trust: 'cosmic' } });
+    assert.ok(r.isError && r.text.includes('low, medium, high'), r.text);
+    r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Age: 'abc' } });
     assert.ok(r.isError && r.text.includes('number'), r.text);
-    r = await rw.call('update_person', { id: 'per_ola', custom_fields: { 'Skąd znam': '  ' } });
+    r = await rw.call('update_person', { id: 'per_ola', custom_fields: { 'Met at': '  ' } });
     assert.ok(r.isError && r.text.includes('empty'), r.text);
     r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Nieznane: 'x' } });
-    assert.ok(r.isError && r.text.includes('Skąd znam'), r.text);
+    assert.ok(r.isError && r.text.includes('Met at'), r.text);
   });
   await t('add_nickname appends an alias once, keeps existing', async () => {
     await rw.call('update_person', { id: 'per_bob', add_nickname: 'Bobbie' });
@@ -778,9 +779,9 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(r.isError && r.text.includes('100'), r.text);
   });
   await t('append_notes keeps existing text', async () => {
-    await rw.call('update_person', { id: 'per_ola', append_notes: 'Lubi herbatę.' });
+    await rw.call('update_person', { id: 'per_ola', append_notes: 'Likes tea.' });
     const n = lastWrite().body.notes;
-    assert.ok(n.startsWith('Poznana na konwencie') && n.endsWith('\n\nLubi herbatę.'), n);
+    assert.ok(n.startsWith('Met at a convention') && n.endsWith('\n\nLikes tea.'), n);
   });
   await t('append_notes refuses past the 10000-char limit', async () => {
     const r = await rw.call('update_person', { id: 'per_ola', append_notes: 'x'.repeat(10000) });
@@ -791,11 +792,11 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(r.isError, r.text);
   });
   await t('update_person changes the relation to you (and reports the old one)', async () => {
-    const r = await rw.call('update_person', { id: 'per_bob', relationship: 'poznany' });
-    assert.ok(!r.isError && r.text.includes('Nie znam -> Poznany'), r.text);
-    assert.deepStrictEqual(lastWrite().body, { relationshipToUserId: 'rt_pozn' });
-    const bad = await rw.call('update_person', { id: 'per_bob', relationship: 'Wróg' });
-    assert.ok(bad.isError && bad.text.includes('Poznany'), bad.text);
+    const r = await rw.call('update_person', { id: 'per_bob', relationship: 'acquaintance' });
+    assert.ok(!r.isError && r.text.includes('Stranger -> Acquaintance'), r.text);
+    assert.deepStrictEqual(lastWrite().body, { relationshipToUserId: 'rt_acq' });
+    const bad = await rw.call('update_person', { id: 'per_bob', relationship: 'Enemy' });
+    assert.ok(bad.isError && bad.text.includes('Acquaintance'), bad.text);
   });
   await t('update_person sets and clears last_contact by hand, and reports the old date', async () => {
     const r = await rw.call('update_person', { id: 'per_ola', last_contact: '2026-10-10' });
@@ -816,14 +817,14 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   await t('add_urls / add_emails / add_phones merge with what is there and send only the changed lists', async () => {
     const r = await rw.call('update_person', {
       id: 'per_ola',
-      add_urls: [{ type: 'youtube', url: 'https://youtube.example/@ola' }, { url: 'https://ERPEGO.example/ola' }],
+      add_urls: [{ type: 'youtube', url: 'https://youtube.example/@ola' }, { url: 'https://RPG.example/ola' }],
       add_emails: [{ type: 'home', email: 'ola@example.com' }],
     });
     assert.ok(!r.isError, r.text);
     const b = lastWrite().body;
     assert.deepStrictEqual(Object.keys(b).sort(), ['emails', 'urls']);
     assert.deepStrictEqual(b.urls, [
-      { type: 'profile', url: 'https://erpego.example/ola' },
+      { type: 'profile', url: 'https://rpg.example/ola' },
       { type: 'youtube', url: 'https://youtube.example/@ola' },
     ]);
     assert.deepStrictEqual(b.emails, [{ type: 'home', email: 'ola@example.com' }]);
@@ -833,7 +834,7 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   });
   await t('adding contact data that is already there changes nothing and sends nothing', async () => {
     state.calls.length = 0;
-    const r = await rw.call('update_person', { id: 'per_ola', add_urls: [{ type: 'x', url: 'https://erpego.example/ola' }] });
+    const r = await rw.call('update_person', { id: 'per_ola', add_urls: [{ type: 'x', url: 'https://rpg.example/ola' }] });
     assert.ok(r.isError && r.text.includes('nothing to update'), r.text);
     assert.ok(!state.calls.some((c) => c.method === 'PUT'));
   });
@@ -841,21 +842,21 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     const r = await rw.call('update_person', { id: 'per_ola', remove_contact: ['https://youtube.example/@OLA', 'OLA@example.com'] });
     assert.ok(!r.isError, r.text);
     const b = lastWrite().body;
-    assert.deepStrictEqual(b.urls, [{ type: 'profile', url: 'https://erpego.example/ola' }]);
+    assert.deepStrictEqual(b.urls, [{ type: 'profile', url: 'https://rpg.example/ola' }]);
     assert.deepStrictEqual(b.emails, []);
     assert.strictEqual(b.phoneNumbers, undefined);
     state.calls.length = 0;
-    const bad = await rw.call('update_person', { id: 'per_ola', remove_contact: ['nie ma'] });
+    const bad = await rw.call('update_person', { id: 'per_ola', remove_contact: ['nonexistent'] });
     assert.ok(bad.isError && bad.text.includes('no phone, email or URL'), bad.text);
     assert.ok(!state.calls.some((c) => c.method === 'PUT'));
   });
   await t('add_dates / remove_dates use the important-dates routes, never the whole array', async () => {
-    const r = await rw.call('update_person', { id: 'per_ola', add_dates: [{ type: 'nameday', date: '2026-05-12' }, { title: 'Pierwsza sesja', date: '2024-03-01' }] });
+    const r = await rw.call('update_person', { id: 'per_ola', add_dates: [{ type: 'nameday', date: '2026-05-12' }, { title: 'First session', date: '2024-03-01' }] });
     assert.ok(!r.isError && r.text.includes('date added'), r.text);
     const posts = writes().slice(-2);
     assert.ok(posts.every((c) => c.path === '/api/people/per_ola/important-dates'));
     assert.deepStrictEqual(posts[0].body, { type: 'nameday', title: '', date: '2026-05-12' });
-    assert.deepStrictEqual(posts[1].body, { type: null, title: 'Pierwsza sesja', date: '2024-03-01' });
+    assert.deepStrictEqual(posts[1].body, { type: null, title: 'First session', date: '2024-03-01' });
     assert.ok(!writes().slice(-2).some((c) => c.path === '/api/people/per_ola'), 'no PUT of the person for dates only');
     const dup = await rw.call('update_person', { id: 'per_ola', add_dates: [{ type: 'birthday', date: '1991-01-01' }] });
     assert.ok(dup.isError && dup.text.includes('already has a birthday'), dup.text);
@@ -866,12 +867,12 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     const rm = await rw.call('update_person', { id: 'per_ola', remove_dates: ['birthday'] });
     assert.ok(!rm.isError && rm.text.includes('date removed'), rm.text);
     assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'DELETE', p: '/api/people/per_ola/important-dates/dt_1' });
-    const none = await rw.call('update_person', { id: 'per_ola', remove_dates: ['nie ma takiej'] });
+    const none = await rw.call('update_person', { id: 'per_ola', remove_dates: ['no such date'] });
     assert.ok(none.isError, none.text);
   });
   await t('tag_people uses the additive bulk action', async () => {
-    const r = await rw.call('tag_people', { ids: ['per_bob', 'per_cez'], groups: ['postapo', 'LARP'] });
-    assert.ok(!r.isError && r.text.includes('Postapo, LARP'), r.text);
+    const r = await rw.call('tag_people', { ids: ['per_bob', 'per_cez'], groups: ['wasteland', 'LARP'] });
+    assert.ok(!r.isError && r.text.includes('Wasteland, LARP'), r.text);
     const w = lastWrite();
     assert.strictEqual(w.path, '/api/people/bulk');
     assert.strictEqual(w.body.action, 'addToGroups');
@@ -879,8 +880,8 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   });
   await t('untag_people removes memberships one by one and counts non-members', async () => {
     const mark = state.calls.length;
-    const r = await rw.call('untag_people', { ids: ['per_bob', 'per_cez', 'per_ola'], groups: ['postapo'] });
-    assert.ok(!r.isError && r.text.includes('removed 2 membership(s) from: Postapo') && r.text.includes('1 pair(s) were not members'), r.text);
+    const r = await rw.call('untag_people', { ids: ['per_bob', 'per_cez', 'per_ola'], groups: ['wasteland'] });
+    assert.ok(!r.isError && r.text.includes('removed 2 membership(s) from: Wasteland') && r.text.includes('1 pair(s) were not members'), r.text);
     const dels = sinceMark(mark).filter((c) => c.method === 'DELETE');
     assert.deepStrictEqual(dels.map((c) => c.path), ['/api/groups/grp_post/members/per_bob', '/api/groups/grp_post/members/per_cez', '/api/groups/grp_post/members/per_ola']);
     assert.ok(state.people.every((x) => !x.groups.some((g) => g.group.id === 'grp_post')));
@@ -889,12 +890,12 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok((await rw.call('untag_people', { ids: ['per_bob'], groups: ['Szachy'] })).isError);
   });
   await t('set_relationship sets your relation for many people at once', async () => {
-    const r = await rw.call('set_relationship', { ids: ['per_bob', 'per_cez', 'per_missing'], relationship: 'poznany' });
-    assert.ok(!r.isError && r.text.includes('"Poznany" for 2 people') && r.text.includes('1 id(s) were not found'), r.text);
+    const r = await rw.call('set_relationship', { ids: ['per_bob', 'per_cez', 'per_missing'], relationship: 'acquaintance' });
+    assert.ok(!r.isError && r.text.includes('"Acquaintance" for 2 people') && r.text.includes('1 id(s) were not found'), r.text);
     const w = lastWrite();
-    assert.deepStrictEqual({ a: w.body.action, t: w.body.relationshipTypeId }, { a: 'setRelationship', t: 'rt_pozn' });
-    assert.strictEqual(state.people.find((x) => x.id === 'per_cez').relationshipToUser.label, 'Poznany');
-    assert.ok((await rw.call('set_relationship', { ids: ['per_bob'], relationship: 'Wróg' })).isError);
+    assert.deepStrictEqual({ a: w.body.action, t: w.body.relationshipTypeId }, { a: 'setRelationship', t: 'rt_acq' });
+    assert.strictEqual(state.people.find((x) => x.id === 'per_cez').relationshipToUser.label, 'Acquaintance');
+    assert.ok((await rw.call('set_relationship', { ids: ['per_bob'], relationship: 'Enemy' })).isError);
   });
   await t('create_group works and refuses duplicates and bad colors', async () => {
     let r = await rw.call('create_group', { name: 'Szachy', color: '#112233' });
@@ -905,15 +906,15 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(r.isError, r.text);
   });
   await t('update_group renames and keeps the description and color (Nametag would wipe them)', async () => {
-    const r = await rw.call('update_group', { group: 'rpg', new_name: 'RPG i MG' });
-    assert.ok(!r.isError && r.text.includes('name: RPG -> RPG i MG'), r.text);
-    assert.deepStrictEqual(lastWrite().body, { name: 'RPG i MG', description: 'sesje', color: '#112233' });
-    assert.strictEqual(state.groups.find((g) => g.id === 'grp_rpg').description, 'sesje');
-    const d = await rw.call('update_group', { group: 'LARP', description: 'Na razie małe RPG' });
+    const r = await rw.call('update_group', { group: 'rpg', new_name: 'RPG and GM' });
+    assert.ok(!r.isError && r.text.includes('name: RPG -> RPG and GM'), r.text);
+    assert.deepStrictEqual(lastWrite().body, { name: 'RPG and GM', description: 'sessions', color: '#112233' });
+    assert.strictEqual(state.groups.find((g) => g.id === 'grp_rpg').description, 'sessions');
+    const d = await rw.call('update_group', { group: 'LARP', description: 'Small RPGs for now' });
     assert.ok(!d.isError, d.text);
-    assert.deepStrictEqual(lastWrite().body, { name: 'LARP', description: 'Na razie małe RPG' });
+    assert.deepStrictEqual(lastWrite().body, { name: 'LARP', description: 'Small RPGs for now' });
     const c = await rw.call('update_group', { group: 'LARP', color: '#FF5733' });
-    assert.deepStrictEqual(lastWrite().body, { name: 'LARP', description: 'Na razie małe RPG', color: '#FF5733' });
+    assert.deepStrictEqual(lastWrite().body, { name: 'LARP', description: 'Small RPGs for now', color: '#FF5733' });
     assert.ok(!c.isError);
     const clear = await rw.call('update_group', { group: 'LARP', description: '' });
     assert.ok(!clear.isError && lastWrite().body.description === null, clear.text);
@@ -924,7 +925,7 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
       assert.ok((await rw.call('update_group', a)).isError, JSON.stringify(a));
     }
     assert.ok(!state.calls.some((c) => c.method === 'PUT'));
-    const dup = await rw.call('update_group', { group: 'LARP', new_name: 'postapo' });
+    const dup = await rw.call('update_group', { group: 'LARP', new_name: 'wasteland' });
     assert.ok(dup.isError && dup.text.includes('already exists'), dup.text);
   });
   await t('delete_group deletes only the tag, never with deletePeople', async () => {
@@ -974,7 +975,7 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(!r.isError && r.text.includes('Friend'), r.text);
     const w = lastWrite();
     assert.strictEqual(w.method, 'PUT');
-    assert.deepStrictEqual(w.body, { relationshipTypeId: 'rt_friend', notes: 'z sesji' });
+    assert.deepStrictEqual(w.body, { relationshipTypeId: 'rt_friend', notes: 'from a session' });
     await rw.call('update_link', { person: 'per_ola', related: 'per_bob', notes: 'nowa notatka' });
     assert.deepStrictEqual(lastWrite().body, { relationshipTypeId: 'rt_friend', notes: 'nowa notatka' });
     await rw.call('update_link', { person: 'per_ola', related: 'per_bob', notes: '' });
@@ -999,11 +1000,11 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(!personByIdOrNull('per_bob').relationshipsFrom.some((r2) => r2.relatedPersonId === 'per_ola'), 'inverse is gone too');
   });
   await t('create_relationship_type: one inverse mode, duplicates refused', async () => {
-    const sym = await rw.call('create_relationship_type', { label: 'Współgracz', symmetric: true, color: '#00FF00' });
+    const sym = await rw.call('create_relationship_type', { label: 'Teammate', symmetric: true, color: '#00FF00' });
     assert.ok(!sym.isError && sym.text.includes('created relationship type'), sym.text);
-    assert.deepStrictEqual({ s: lastWrite().body.symmetric, c: lastWrite().body.color, n: lastWrite().body.name }, { s: true, c: '#00FF00', n: 'Współgracz' });
-    const pair = await rw.call('create_relationship_type', { label: 'Mentor', inverse_label: 'Uczeń' });
-    assert.ok(!pair.isError && pair.text.includes('inverse: Uczeń'), pair.text);
+    assert.deepStrictEqual({ s: lastWrite().body.symmetric, c: lastWrite().body.color, n: lastWrite().body.name }, { s: true, c: '#00FF00', n: 'Teammate' });
+    const pair = await rw.call('create_relationship_type', { label: 'Mentor', inverse_label: 'Student' });
+    assert.ok(!pair.isError && pair.text.includes('inverse: Student'), pair.text);
     const existing = await rw.call('create_relationship_type', { label: 'Kuzyn', inverse: 'friend' });
     assert.ok(!existing.isError, existing.text);
     assert.strictEqual(lastWrite().body.inverseId, 'rt_friend');
@@ -1027,7 +1028,7 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('add_journal builds a valid body', async () => {
-    const r = await rw.call('add_journal', { title: 'Sesja', body: 'Grali do rana', date: '2026-06-01', people: ['per_ola'] });
+    const r = await rw.call('add_journal', { title: 'Session', body: 'Played until dawn', date: '2026-06-01', people: ['per_ola'] });
     assert.ok(!r.isError && r.text.includes('jr_new'), r.text);
     const b = lastWrite().body;
     assert.strictEqual(b.date, '2026-06-01T00:00:00.000Z');
@@ -1039,12 +1040,12 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   });
   await t('update_journal keeps people, date and time when only the title changes, and never bumps last contact', async () => {
     const lcBefore = state.people.find((x) => x.id === 'per_bob').lastContact;
-    const r = await rw.call('update_journal', { id: 'jr_2', title: 'Sesja Postapo' });
+    const r = await rw.call('update_journal', { id: 'jr_2', title: 'Wasteland session' });
     assert.ok(!r.isError && r.text.includes('title'), r.text);
     const w = lastWrite();
     assert.strictEqual(w.method, 'PUT');
     assert.strictEqual(w.path, '/api/journal/jr_2');
-    assert.deepStrictEqual(w.body, { title: 'Sesja Postapo', body: 'Grali do rana', date: iso('2026-06-02'), hasTime: false, personIds: ['per_ola', 'per_bob'], updateLastContact: false });
+    assert.deepStrictEqual(w.body, { title: 'Wasteland session', body: 'Played until dawn', date: iso('2026-06-02'), hasTime: false, personIds: ['per_ola', 'per_bob'], updateLastContact: false });
     assert.strictEqual(state.people.find((x) => x.id === 'per_bob').lastContact, lcBefore);
     const e = state.journal.find((x) => x.id === 'jr_2');
     assert.strictEqual(e.people.length, 2, 'tagged people survived the PUT');
@@ -1068,14 +1069,14 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   });
   await t('delete_journal removes the entry and returns everything needed to re-create it', async () => {
     const r = await rw.call('delete_journal', { id: 'jr_1' });
-    assert.ok(!r.isError && r.text.includes('title: Pyrkon') && r.text.includes('people: per_ola') && r.text.includes('Spotkanie z Olą') && r.text.includes('no restore'), r.text);
+    assert.ok(!r.isError && r.text.includes('title: Convention') && r.text.includes('people: per_ola') && r.text.includes('Met Ola at the convention') && r.text.includes('no restore'), r.text);
     assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'DELETE', p: '/api/journal/jr_1' });
     assert.ok(!state.journal.some((x) => x.id === 'jr_1'));
     assert.ok((await rw.call('delete_journal', { id: 'jr_1' })).isError);
   });
   await t('journal edits do not undo a manual last contact date', async () => {
     await rw.call('update_person', { id: 'per_ola', last_contact: '2026-01-01' });
-    await rw.call('add_journal', { title: 'Pomyłka', body: 'zły wpis', date: '2026-10-18', people: ['per_ola'] });
+    await rw.call('add_journal', { title: 'Mistake', body: 'wrong entry', date: '2026-10-18', people: ['per_ola'] });
     assert.strictEqual(ola().lastContact, iso('2026-10-18'), 'the fake mimics Nametag: a journal entry moves last contact forward');
     const id = state.journal[state.journal.length - 1].id;
     await rw.call('delete_journal', { id });
