@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>mcp-nametag-connector</Name>
+  <Repository>ghcr.io/radzupl/mcp-connectors/nametag:latest</Repository>
+  <Registry>https://github.com/RadzuPL/mcp-connectors/pkgs/container/mcp-connectors%2Fnametag</Registry>
+  <Network>mcp_network</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/RadzuPL/mcp-connectors/issues</Support>
+  <Project>https://github.com/RadzuPL/mcp-connectors/tree/master/nametag</Project>
+  <ReadMe>https://github.com/RadzuPL/mcp-connectors/blob/master/nametag/README.md</ReadMe>
+  <Overview>MCP connector for Nametag (personal relationship manager). Read-only by default: write access and destructive tools are separate switches. Port 8000, path /mcp, behind a bearer-token gateway. Needs a running Nametag and an API token created in Nametag under Settings, API Tokens.</Overview>
+  <Category/>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/RadzuPL/mcp-connectors/master/nametag/unraid/mcp-nametag-connector.xml</TemplateURL>
+  <Icon/>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>A running Nametag instance reachable over HTTP from this container.</Requires>
+  <Config Name="NAMETAG_URL" Target="NAMETAG_URL" Default="http://192.168.1.100:3000" Mode="" Description="Address of Nametag as seen from this container. Same Docker network: container name and internal port (http://nametag:3000). Different networks: Unraid IP and the published port of Nametag." Type="Variable" Display="always" Required="true" Mask="false">http://192.168.1.100:3000</Config>
+  <Config Name="NAMETAG_API_TOKEN_FILE" Target="NAMETAG_API_TOKEN_FILE" Default="/run/secrets/nametag_api_token" Mode="" Description="Path inside the container to the file with the Nametag API token (ntag_...). Leave as is and set the host path below." Type="Variable" Display="advanced" Required="true" Mask="false">/run/secrets/nametag_api_token</Config>
+  <Config Name="MCP_BEARER_TOKEN_FILE" Target="MCP_BEARER_TOKEN_FILE" Default="/run/secrets/mcp_bearer_token" Mode="" Description="Path inside the container to the file with the gateway bearer token. Leave as is and set the host path below." Type="Variable" Display="advanced" Required="true" Mask="false">/run/secrets/mcp_bearer_token</Config>
+  <Config Name="NAMETAG_ENABLE_WRITE" Target="NAMETAG_ENABLE_WRITE" Default="false|true" Mode="" Description="false = read only. true enables the write tools (needs a READ_WRITE API token in Nametag)." Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="NAMETAG_ENABLE_DESTRUCTIVE" Target="NAMETAG_ENABLE_DESTRUCTIVE" Default="false|true" Mode="" Description="true unlocks delete_person and merge_people. Only has an effect together with NAMETAG_ENABLE_WRITE=true." Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Gateway bearer token file" Target="/run/secrets/mcp_bearer_token" Default="/mnt/user/appdata/mcp-nametag/bearer_token" Mode="ro" Description="Host file with the gateway bearer token (just the token text)." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/mcp-nametag/bearer_token</Config>
+  <Config Name="Nametag API token file" Target="/run/secrets/nametag_api_token" Default="/mnt/user/appdata/mcp-nametag/nametag_api_token" Mode="ro" Description="Host file with the Nametag API token (just the ntag_... text)." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/mcp-nametag/nametag_api_token</Config>
+</Container>
