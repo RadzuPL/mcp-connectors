@@ -2,7 +2,8 @@
 // Tests for nametag/server.js against a fake Nametag API. No network, no Nametag needed:
 //   node nametag/test-server.js
 // The fake follows the behaviour of the real Nametag API that the connector has to work around
-// (checked against the Nametag source, 0.64): a link needs a type, `connectedThroughId` drops the
+// (checked against the Nametag source, 0.64; error responses follow 0.65: `{ error, code }` and 409 for
+// duplicates; the 0.64 shape, 400 and no `code`, is covered by injected errors below): a link needs a type, `connectedThroughId` drops the
 // relation to you, a group PUT needs the name and drops a missing description, a journal PUT
 // drops the tagged people when none are sent, journal entries list their people as join rows.
 const http = require('http');
@@ -19,6 +20,7 @@ const iso = (d) => `${d}T00:00:00.000Z`;
 
 // ------------------------------------------------------------------ fake API
 const state = {
+  inject: null, // { test(method, path), status, body }: answer the next matching request with this error
   groups: [
     { id: 'grp_hiking', name: 'Hiking', description: 'weekend trips', color: '#112233' },
     { id: 'grp_chess', name: 'Chess', description: '', color: null },
@@ -131,7 +133,9 @@ function send(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(obj));
 }
-const bad = (res, field, message) => send(res, 400, { error: 'Validation failed', details: [{ field, message }] });
+const bad = (res, field, message) =>
+  send(res, 400, { error: 'Validation failed', code: 'validation_failed', details: [{ field, message }], fields: [{ path: field, issue: 'invalid_value' }] });
+const conflict = (res, code, message) => send(res, 409, { error: message, code });
 
 function groupBody(g) {
   return { ...g, people: state.people.filter((x) => x.groups.some((m) => m.group.id === g.id)).map((x) => ({ personId: x.id, person: x })) };
@@ -147,11 +151,16 @@ const api = http.createServer((req, res) => {
     state.calls.push({ method: req.method, path: url.pathname, query: url.search, body, auth: req.headers.authorization });
     if (req.headers.authorization !== `Bearer ${SECRET}`) {
       state.badAuth++;
-      return send(res, 401, { error: 'Unauthorized' });
+      return send(res, 401, { error: 'Unauthorized', code: 'invalid_token' });
     }
     const p = url.pathname;
     const m = req.method;
     let mm;
+    if (state.inject && state.inject.test(m, p)) {
+      const { status, body: errBody } = state.inject;
+      state.inject = null;
+      return send(res, status, errBody);
+    }
 
     // ---- catalog
     if (m === 'GET' && p === '/api/groups') return send(res, 200, { groups: state.groups });
@@ -213,7 +222,7 @@ const api = http.createServer((req, res) => {
       if (m === 'GET') return send(res, 200, { group: groupBody(g) });
       if (m === 'PUT') {
         if (!body.name) return bad(res, 'name', 'Group name is required');
-        if (state.groups.some((x) => x.id !== g.id && x.name.toLowerCase() === body.name.toLowerCase())) return send(res, 400, { error: 'A group with this name already exists' });
+        if (state.groups.some((x) => x.id !== g.id && x.name.toLowerCase() === body.name.toLowerCase())) return conflict(res, 'group_name_taken', 'A group with this name already exists');
         g.name = body.name;
         g.description = body.description || null; // a missing description is wiped
         if (body.color !== undefined) g.color = body.color;
@@ -329,7 +338,7 @@ const api = http.createServer((req, res) => {
       if (!x) return send(res, 404, { error: 'Person not found' });
       if (!body.type && !body.title) return bad(res, 'title', 'Title is required when no predefined type is selected');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return bad(res, 'date', 'Invalid date');
-      if (body.type && x.importantDates.some((d) => d.type === body.type)) return send(res, 400, { error: `A "${body.type}" date already exists for this person.` });
+      if (body.type && x.importantDates.some((d) => d.type === body.type)) return conflict(res, 'important_date_type_exists', `A "${body.type}" date already exists for this person.`);
       const d = { id: `dt_new${++seq}`, type: body.type || null, title: body.title || '', date: iso(body.date) };
       x.importantDates.push(d);
       return send(res, 201, { importantDate: d });
@@ -348,7 +357,7 @@ const api = http.createServer((req, res) => {
       if (!personById(body.personId) || !personById(body.relatedPersonId)) return send(res, 404, { error: 'One or both people not found' });
       if (!typeById(body.relationshipTypeId)) return send(res, 404, { error: 'Relationship type not found' });
       if (personById(body.personId).relationshipsFrom.some((r) => r.relatedPersonId === body.relatedPersonId && r.relationshipTypeId === body.relationshipTypeId)) {
-        return send(res, 400, { error: 'This relationship already exists' });
+        return conflict(res, 'relationship_exists', 'This relationship already exists');
       }
       return send(res, 201, { relationship: linkRows(body.personId, body.relatedPersonId, body.relationshipTypeId, body.notes) });
     }
@@ -657,7 +666,7 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     fs.writeFileSync(f, 'ntag_wrong');
     const s = startServer({ ...base, NAMETAG_API_TOKEN_FILE: f });
     const r = await s.call('catalog');
-    assert.ok(r.isError && r.text.includes('401') && !r.text.includes('ntag_wrong'), r.text);
+    assert.ok(r.isError && r.text.includes('401, invalid_token') && !r.text.includes('ntag_wrong'), r.text);
     s.stop();
     state.badAuth = 0;
   });
@@ -1096,6 +1105,51 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   await t('write mode never deleted a person or merged anyone', async () => {
     assert.ok(!state.calls.some((c) => c.method === 'DELETE' && /^\/api\/people\/[^/]+$/.test(c.path)));
     assert.ok(!state.calls.some((c) => c.path === '/api/people/merge'));
+  });
+  // ---- API error shapes: Nametag 0.65 ({ error, code, params? }, distinct statuses) and 0.64 ({ error } only)
+  const failNextGroupPut = async (status, errBody) => {
+    state.inject = { test: (m, pth) => m === 'PUT' && pth === '/api/groups/grp_chess', status, body: errBody };
+    const r = await rw.call('update_group', { group: 'Chess', description: 'x' });
+    state.inject = null;
+    return r;
+  };
+  await t('error 409 with a code: shown as a conflict with the code', async () => {
+    const r = await failNextGroupPut(409, { error: 'A group with this name already exists', code: 'group_name_taken' });
+    assert.ok(r.isError && r.text.startsWith('conflict (409)') && r.text.includes('[group_name_taken]'), r.text);
+  });
+  await t('error 400 without a code (Nametag 0.64): still the friendly "rejected" message', async () => {
+    const r = await failNextGroupPut(400, { error: 'A group with this name already exists' });
+    assert.ok(r.isError && r.text === 'rejected: A group with this name already exists', r.text);
+  });
+  await t('error 400 with a code but no details: message and code', async () => {
+    const r = await failNextGroupPut(400, { error: 'Self relationship', code: 'self_relationship' });
+    assert.ok(r.isError && r.text === 'rejected: Self relationship [self_relationship]', r.text);
+  });
+  await t('validation_failed: fields are listed, from details or from fields', async () => {
+    const a = await failNextGroupPut(400, { error: 'Validation failed', code: 'validation_failed', details: [{ field: 'name', message: 'Required' }], fields: [{ path: 'name', issue: 'required' }] });
+    assert.ok(a.isError && a.text === 'validation failed: name: Required', a.text);
+    const b = await failNextGroupPut(400, { error: 'Validation failed', code: 'validation_failed', fields: [{ path: 'color', issue: 'invalid_format' }] });
+    assert.ok(b.isError && b.text === 'validation failed: color: invalid_format', b.text);
+  });
+  await t('error 403: read-only token, plan limit and disabled feature get their own hint', async () => {
+    const ro403 = await failNextGroupPut(403, { error: 'This API token is read-only', code: 'forbidden' });
+    assert.ok(ro403.isError && ro403.text.includes('(403)') && ro403.text.includes('[forbidden]') && ro403.text.includes('READ-scoped'), ro403.text);
+    const plan = await failNextGroupPut(403, { error: 'Limit reached', code: 'plan_limit_reached', params: { resource: 'people', limit: 50 } });
+    assert.ok(plan.isError && plan.text.includes('[plan_limit_reached]') && plan.text.includes('resource=people') && plan.text.includes('limit=50') && !plan.text.includes('READ-scoped'), plan.text);
+    const off = await failNextGroupPut(403, { error: 'Feature disabled', code: 'feature_disabled', params: { feature: 'journal', scope: 'instance' } });
+    assert.ok(off.isError && off.text.includes('turned off') && off.text.includes('feature=journal'), off.text);
+    const old = await failNextGroupPut(403, { error: 'Forbidden' });
+    assert.ok(old.isError && old.text.includes('READ-scoped'), old.text);
+  });
+  await t('error 413 and 429 are named, an unknown code falls back to the status', async () => {
+    const big = await failNextGroupPut(413, { error: 'Photo too large', code: 'photo_too_large' });
+    assert.ok(big.isError && big.text.startsWith('payload too large (413)') && big.text.includes('[photo_too_large]'), big.text);
+    const rate = await failNextGroupPut(429, { error: 'Too many requests', code: 'rate_limited' });
+    assert.ok(rate.isError && rate.text.startsWith('rate limited (429)'), rate.text);
+    const odd = await failNextGroupPut(502, { error: 'Upstream failed', code: 'some_future_code' });
+    assert.ok(odd.isError && odd.text.includes('502') && odd.text.includes('[some_future_code]') && odd.text.includes('PUT /api/groups/grp_chess'), odd.text);
+    const html = await failNextGroupPut(500, { error: 12 });
+    assert.ok(html.isError && html.text.startsWith('Nametag API 500'), html.text);
   });
   await t('token never appears in any tool output or on stderr', async () => {
     assert.strictEqual(state.badAuth, 0);
