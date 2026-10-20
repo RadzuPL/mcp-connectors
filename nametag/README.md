@@ -74,10 +74,6 @@ pass-through:
   (`add_nickname` appends one and refuses to go past the limit).
 - **Notes** are Markdown, max 10000 chars. `append_notes` refuses to overflow and points to
   `add_journal` instead.
-- **Where do you know them from?** Nametag has no such built-in field. Use a custom field
-  (for example a text field `Skąd znam`, created under *Settings > Custom Fields* in Nametag),
-  groups for contexts (a group per convention or campaign), `met_through` for "introduced by",
-  or the notes.
 
 ## Architecture and security
 
@@ -105,7 +101,7 @@ your Nametag; keep the client list short and the tunnel locked down (see
 
 | Variable | Required | Example | Notes |
 |---|---|---|---|
-| `NAMETAG_URL` | yes | `http://nametag:3000` or `http://192.168.10.15:3033` | where *this container* can reach Nametag. Same Docker network: container name and **internal** port (`http://nametag:3000`). Different networks (the usual case when the connector sits next to the tunnel): host IP and the **published** port (`http://<host-ip>:3033`) |
+| `NAMETAG_URL` | yes | `http://nametag:3000` or `http://192.168.1.100:3000` | where *this container* can reach Nametag. Same Docker network: container name and **internal** port (`http://nametag:3000`). Different networks (the usual case when the connector sits next to the tunnel): host IP and the **published** port (`http://<host-ip>:<published-port>`) |
 | `NAMETAG_API_TOKEN_FILE` | yes (or `NAMETAG_API_TOKEN`) | `/run/secrets/nametag_api_token` | the `ntag_...` token from Nametag |
 | `NAMETAG_ENABLE_WRITE` | no | `true` | default off. Needs a READ_WRITE token |
 | `NAMETAG_ENABLE_DESTRUCTIVE` | no | `true` | default off. Only has an effect together with `NAMETAG_ENABLE_WRITE`; unlocks `delete_person` and `merge_people` |
@@ -122,19 +118,30 @@ Image: `ghcr.io/<owner>/mcp-connectors/nametag:latest`, built by
 2. Put the token into a file on the host, for example `/mnt/user/appdata/mcp/secrets/nametag_api_token`
    (just the `ntag_...` text) and mount it read-only into the container at
    `/run/secrets/nametag_api_token`. Do the same for the gateway bearer token.
-3. Make the `nametag` package public in the GitHub package settings if the host pulls
-   without credentials (packages published by Actions start out private).
-4. Run the container with the variables above, in **the same Docker network as the
+3. Run the container with the variables above, in **the same Docker network as the
    tunnel's `cloudflared`** (the tunnel reaches it by container name on port 8000; no
    published port needed). If Nametag lives in another network, do not try to join both:
    point `NAMETAG_URL` at the host IP and Nametag's published port (for example
-   `http://192.168.10.15:3033`). The connector only needs to reach Nametag over HTTP.
-5. Add the hostname to the tunnel (service `http://<container-name>:8000`) and to the WAF
+   `http://192.168.1.100:3000`). The connector only needs to reach Nametag over HTTP.
+4. Add the hostname to the tunnel (service `http://<container-name>:8000`) and to the WAF
    rules as for the other connectors, then add the connector in the MCP client.
 
-On Unraid, add the container through *Docker > Add Container*: repository
-`ghcr.io/<owner>/mcp-connectors/nametag:latest`, the network of the tunnel, extra
-parameter `--restart unless-stopped`, the variables from the table above and two
+On Unraid there is a ready-made template,
+[`unraid/mcp-nametag-connector.xml`](unraid/mcp-nametag-connector.xml). In the Unraid
+terminal, download it into the user templates folder:
+
+```
+wget -O /boot/config/plugins/dockerMan/templates-user/my-mcp-nametag-connector.xml https://raw.githubusercontent.com/RadzuPL/mcp-connectors/master/nametag/unraid/mcp-nametag-connector.xml
+```
+
+Then open *Docker > Add Container*, pick `mcp-nametag-connector` from the *Template* list,
+set the network of the tunnel, fill in `NAMETAG_URL` and the two token file paths, and click
+*Apply*. The template has write access and destructive tools switched off; change
+`NAMETAG_ENABLE_WRITE` and `NAMETAG_ENABLE_DESTRUCTIVE` only if you need them.
+
+Without the template, add the container by hand through *Docker > Add Container*:
+repository `ghcr.io/<owner>/mcp-connectors/nametag:latest`, the network of the tunnel,
+extra parameter `--restart unless-stopped`, the variables from the table above and two
 read-only path mappings (the bearer token file to `/run/secrets/mcp_bearer_token`, the
 Nametag token file to `/run/secrets/nametag_api_token`).
 
@@ -250,9 +257,6 @@ przelotką:
   (`add_nickname` dopisuje jeden i odmawia przekroczenia limitu).
 - **Notatki** to Markdown, max 10000 znaków. `append_notes` nie pozwoli przepełnić i
   wskaże `add_journal`.
-- **Skąd znam?** Nametag nie ma takiego wbudowanego pola. Użyj pola własnego (np. tekstowego
-  `Skąd znam`, tworzonego w Nametagu w *Settings > Custom Fields*), grup jako kontekstów
-  (grupa na konwent albo kampanię), `met_through` dla „poznany przez”, albo notatek.
 
 ### Architektura i bezpieczeństwo
 
@@ -280,7 +284,7 @@ Nametaga; trzymaj listę klientów krótką, a tunel zamknięty (zobacz
 
 | Zmienna | Wymagana | Przykład | Uwagi |
 |---|---|---|---|
-| `NAMETAG_URL` | tak | `http://nametag:3000` albo `http://192.168.10.15:3033` | adres, pod którym *ten kontener* widzi Nametaga. Ta sama sieć Dockera: nazwa kontenera i **wewnętrzny** port (`http://nametag:3000`). Różne sieci (typowo, gdy konektor stoi obok tunelu): IP hosta i port **opublikowany** (`http://<ip-hosta>:3033`) |
+| `NAMETAG_URL` | tak | `http://nametag:3000` albo `http://192.168.1.100:3000` | adres, pod którym *ten kontener* widzi Nametaga. Ta sama sieć Dockera: nazwa kontenera i **wewnętrzny** port (`http://nametag:3000`). Różne sieci (typowo, gdy konektor stoi obok tunelu): IP hosta i port **opublikowany** (`http://<ip-hosta>:<opublikowany-port>`) |
 | `NAMETAG_API_TOKEN_FILE` | tak (albo `NAMETAG_API_TOKEN`) | `/run/secrets/nametag_api_token` | token `ntag_...` z Nametaga |
 | `NAMETAG_ENABLE_WRITE` | nie | `true` | domyślnie wyłączone. Wymaga tokenu READ_WRITE |
 | `NAMETAG_ENABLE_DESTRUCTIVE` | nie | `true` | domyślnie wyłączone. Działa tylko razem z `NAMETAG_ENABLE_WRITE`; odblokowuje `delete_person` i `merge_people` |
@@ -297,17 +301,28 @@ Obraz: `ghcr.io/<owner>/mcp-connectors/nametag:latest`, budowany przez
 2. Wpisz token do pliku na hoście, np. `/mnt/user/appdata/mcp/secrets/nametag_api_token`
    (sam tekst `ntag_...`) i zamontuj go tylko do odczytu w kontenerze jako
    `/run/secrets/nametag_api_token`. To samo zrób z tokenem bearer bramki.
-3. Ustaw pakiet `nametag` jako publiczny w ustawieniach pakietów GitHuba, jeśli host pobiera
-   obrazy bez poświadczeń (pakiety publikowane przez Actions zaczynają jako prywatne).
-4. Uruchom kontener z powyższymi zmiennymi w **tej samej sieci Dockera co `cloudflared`
+3. Uruchom kontener z powyższymi zmiennymi w **tej samej sieci Dockera co `cloudflared`
    tunelu** (tunel dociera do niego po nazwie kontenera na porcie 8000; opublikowany port
    niepotrzebny). Jeśli Nametag stoi w innej sieci, nie łącz kontenera z obiema: ustaw
-   `NAMETAG_URL` na IP hosta i opublikowany port Nametaga (np. `http://192.168.10.15:3033`).
+   `NAMETAG_URL` na IP hosta i opublikowany port Nametaga (np. `http://192.168.1.100:3000`).
    Konektor potrzebuje tylko dostępu do Nametaga po HTTP.
-5. Dodaj hostname do tunelu (usługa `http://<nazwa-kontenera>:8000`) i do reguł WAF jak przy
+4. Dodaj hostname do tunelu (usługa `http://<nazwa-kontenera>:8000`) i do reguł WAF jak przy
    pozostałych konektorach, potem dodaj konektor w kliencie MCP.
 
-Na Unraidzie kontener dodajesz przez *Docker > Add Container*: repozytorium
+Na Unraidzie jest gotowy szablon,
+[`unraid/mcp-nametag-connector.xml`](unraid/mcp-nametag-connector.xml). W terminalu Unraida
+pobierz go do folderu szablonów użytkownika:
+
+```
+wget -O /boot/config/plugins/dockerMan/templates-user/my-mcp-nametag-connector.xml https://raw.githubusercontent.com/RadzuPL/mcp-connectors/master/nametag/unraid/mcp-nametag-connector.xml
+```
+
+Potem otwórz *Docker > Add Container*, wybierz `mcp-nametag-connector` z listy *Template*,
+ustaw sieć tunelu, uzupełnij `NAMETAG_URL` i dwie ścieżki do plików z tokenami, i kliknij
+*Apply*. W szablonie zapis i narzędzia destrukcyjne są wyłączone; `NAMETAG_ENABLE_WRITE` i
+`NAMETAG_ENABLE_DESTRUCTIVE` zmieniaj tylko wtedy, gdy ich potrzebujesz.
+
+Bez szablonu kontener dodajesz ręcznie przez *Docker > Add Container*: repozytorium
 `ghcr.io/<owner>/mcp-connectors/nametag:latest`, sieć tunelu, dodatkowy parametr
 `--restart unless-stopped`, zmienne z tabeli powyżej i dwa mapowania ścieżek tylko do
 odczytu (plik z tokenem bearer do `/run/secrets/mcp_bearer_token`, plik z tokenem Nametaga do
