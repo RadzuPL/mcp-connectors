@@ -20,21 +20,21 @@ const iso = (d) => `${d}T00:00:00.000Z`;
 // ------------------------------------------------------------------ fake API
 const state = {
   groups: [
-    { id: 'grp_rpg', name: 'RPG', description: 'sesje', color: '#112233' },
-    { id: 'grp_larp', name: 'LARP', description: '', color: null },
-    { id: 'grp_post', name: 'Postapo', description: '' },
+    { id: 'grp_hiking', name: 'Hiking', description: 'weekend trips', color: '#112233' },
+    { id: 'grp_chess', name: 'Chess', description: '', color: null },
+    { id: 'grp_neighbours', name: 'Neighbours', description: '' },
   ],
   types: [
     { id: 'rt_friend', label: 'Friend', name: 'FRIEND', inverseId: 'rt_friend' },
-    { id: 'rt_mg', label: 'Game Master', name: 'GM', inverseId: 'rt_player' },
-    { id: 'rt_player', label: 'Player', name: 'PLAYER', inverseId: 'rt_mg' },
-    { id: 'rt_nie', label: 'Nie znam', name: 'NIE_ZNAM', inverseId: 'rt_nie' },
-    { id: 'rt_pozn', label: 'Poznany', name: 'POZNANY', inverseId: 'rt_pozn' },
+    { id: 'rt_manager', label: 'Manager', name: 'MANAGER', inverseId: 'rt_report' },
+    { id: 'rt_report', label: 'Report', name: 'REPORT', inverseId: 'rt_manager' },
+    { id: 'rt_colleague', label: 'Colleague', name: 'COLLEAGUE', inverseId: 'rt_colleague' },
+    { id: 'rt_classmate', label: 'Classmate', name: 'CLASSMATE', inverseId: 'rt_classmate' },
   ],
   templates: [
-    { id: 'tpl_from', name: 'Skąd znam', slug: 'skad-znam', type: 'TEXT', options: [] },
-    { id: 'tpl_lvl', name: 'Zaufanie', slug: 'zaufanie', type: 'SELECT', options: ['niskie', 'średnie', 'wysokie'] },
-    { id: 'tpl_num', name: 'Wiek', slug: 'wiek', type: 'NUMBER', options: [] },
+    { id: 'tpl_home', name: 'Hometown', slug: 'hometown', type: 'TEXT', options: [] },
+    { id: 'tpl_size', name: 'Shirt size', slug: 'shirt-size', type: 'SELECT', options: ['small', 'medium', 'large'] },
+    { id: 'tpl_num', name: 'Age', slug: 'age', type: 'NUMBER', options: [] },
   ],
   people: [],
   journal: [],
@@ -85,41 +85,42 @@ function reset() {
   state.trash = { people: [], groups: [] };
   state.people = [
     makePerson({
-      id: 'per_ola',
-      name: 'Aleksandra',
+      id: 'per_alex',
+      name: 'Alexandra',
+      // Non-ASCII on purpose: the accent-insensitive search tests rely on it.
       surname: 'Łukasiewicz',
-      nickname: 'Ola',
-      notes: 'Poznana na konwencie Pyrkon. Prowadzi sesje Warhammera.',
+      nickname: 'Alex',
+      notes: 'Met through work. Plays guitar in a band.',
       rel: 'rt_friend',
       lastContact: iso('2026-10-16'),
-      groups: ['grp_rpg'],
-      customFieldValues: [{ templateId: 'tpl_from', value: 'Pyrkon 2019', template: { name: 'Skąd znam' } }],
-      phoneNumbers: [{ type: 'mobile', number: '+48 600 100 200' }],
-      urls: [{ type: 'profile', url: 'https://erpego.example/ola' }],
+      groups: ['grp_hiking'],
+      customFieldValues: [{ templateId: 'tpl_home', value: 'Leeds', template: { name: 'Hometown' } }],
+      phoneNumbers: [{ type: 'mobile', number: '+44 600 100 200' }],
+      urls: [{ type: 'profile', url: 'https://social.example/alex' }],
       importantDates: [{ id: 'dt_1', type: 'birthday', title: '', date: iso('1990-05-04') }],
     }),
-    makePerson({ id: 'per_bob', name: 'Bob', surname: 'Budowniczy', nickname: 'Builder, Bobo', notes: 'Postapo LARP w kopalni', rel: 'rt_nie' }),
-    makePerson({ id: 'per_cez', name: 'Cezary', rel: 'rt_nie' }),
+    makePerson({ id: 'per_bob', name: 'Bob', surname: 'Brown', nickname: 'Bobby, Rob', notes: 'Weekend climber and mountain guide', rel: 'rt_colleague' }),
+    makePerson({ id: 'per_carl', name: 'Carl', rel: 'rt_colleague' }),
   ];
-  linkRows('per_ola', 'per_bob', 'rt_player', 'z sesji');
+  linkRows('per_alex', 'per_bob', 'rt_report', 'from university');
   state.journal = [
     {
       id: 'jr_1',
       date: iso('2026-05-01'),
       hasTime: false,
-      title: 'Pyrkon',
-      body: 'Spotkanie z Olą',
-      people: [{ journalEntryId: 'jr_1', personId: 'per_ola', person: { id: 'per_ola', name: 'Aleksandra', surname: null } }],
+      title: 'Birthday party',
+      body: 'Met Alex at the party',
+      people: [{ journalEntryId: 'jr_1', personId: 'per_alex', person: { id: 'per_alex', name: 'Alexandra', surname: null } }],
     },
     {
       id: 'jr_2',
       date: iso('2026-06-02'),
       hasTime: false,
-      title: 'Sesja',
-      body: 'Grali do rana',
+      title: 'Dinner',
+      body: 'Talked until midnight',
       people: [
-        { journalEntryId: 'jr_2', personId: 'per_ola', person: { id: 'per_ola', name: 'Aleksandra', surname: null } },
-        { journalEntryId: 'jr_2', personId: 'per_bob', person: { id: 'per_bob', name: 'Bob', surname: 'Budowniczy' } },
+        { journalEntryId: 'jr_2', personId: 'per_alex', person: { id: 'per_alex', name: 'Alexandra', surname: null } },
+        { journalEntryId: 'jr_2', personId: 'per_bob', person: { id: 'per_bob', name: 'Bob', surname: 'Brown' } },
       ],
     },
   ];
@@ -304,7 +305,7 @@ const api = http.createServer((req, res) => {
       if (m === 'GET') return send(res, 200, { person: x });
       if (m === 'DELETE') {
         state.people = state.people.filter((y) => y.id !== x.id);
-        state.trash.people.push({ item: x, deletedAt: new Date(Date.now() - (x.id === 'per_cez' ? 3 : 0) * 86400000).toISOString() });
+        state.trash.people.push({ item: x, deletedAt: new Date(Date.now() - (x.id === 'per_carl' ? 3 : 0) * 86400000).toISOString() });
         return send(res, 200, { message: 'Person deleted successfully' });
       }
       if (m === 'PUT') {
@@ -541,75 +542,75 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(r.isError);
     assert.ok(/disabled/.test(r.text));
     for (const name of ['delete_person', 'merge_people', 'update_journal', 'delete_group', 'restore']) {
-      const x = await ro.call(name, { id: 'per_ola', primary: 'per_ola', secondary: 'per_bob', group: 'RPG' });
+      const x = await ro.call(name, { id: 'per_alex', primary: 'per_alex', secondary: 'per_bob', group: 'Hiking' });
       assert.ok(x.isError && /disabled/.test(x.text), x.text);
     }
     assert.strictEqual(state.calls.length, 0);
   });
   await t('find_people by name is accent-insensitive on listing path', async () => {
-    const r = await ro.call('find_people', { q: 'ola' });
-    assert.ok(r.text.includes('per_ola'), r.text);
+    const r = await ro.call('find_people', { q: 'alex' });
+    assert.ok(r.text.includes('per_alex'), r.text);
   });
   await t('find_people by name has the same columns as a listing (relation, groups)', async () => {
     const r = await ro.call('find_people', { q: 'lukasiewicz' });
     assert.ok(r.text.includes('id | name | nickname | relation | groups'), r.text);
-    assert.ok(r.text.includes('per_ola') && r.text.includes('Friend') && r.text.includes('RPG'), r.text);
-    const none = await ro.call('find_people', { q: 'nikt taki' });
+    assert.ok(r.text.includes('per_alex') && r.text.includes('Friend') && r.text.includes('Hiking'), r.text);
+    const none = await ro.call('find_people', { q: 'nobody like that' });
     assert.ok(none.text.startsWith('0 of 0 people') && none.text.includes('deep=true'), none.text);
   });
   await t('find_people with group filters via groupIds', async () => {
-    const r = await ro.call('find_people', { group: 'rpg' });
-    assert.ok(r.text.includes('per_ola') && !r.text.includes('per_bob'), r.text);
+    const r = await ro.call('find_people', { group: 'hiking' });
+    assert.ok(r.text.includes('per_alex') && !r.text.includes('per_bob'), r.text);
     assert.ok(r.text.includes('groups'), r.text);
   });
   await t('find_people with q and group filters names client side', async () => {
-    const r = await ro.call('find_people', { group: 'RPG', q: 'lukasiewicz' });
-    assert.ok(r.text.includes('per_ola'), r.text);
+    const r = await ro.call('find_people', { group: 'Hiking', q: 'lukasiewicz' });
+    assert.ok(r.text.includes('per_alex'), r.text);
   });
   await t('find_people shows the relation to you as a column', async () => {
-    const r = await ro.call('find_people', { group: 'RPG' });
+    const r = await ro.call('find_people', { group: 'Hiking' });
     assert.ok(r.text.includes('id | name | nickname | relation | groups'), r.text);
     assert.ok(r.text.includes('Friend'), r.text);
   });
-  await t('find_people keeps one relation ("who is Nie znam")', async () => {
-    const r = await ro.call('find_people', { relationship: 'nie znam' });
-    assert.ok(r.text.includes('per_bob') && r.text.includes('per_cez') && !r.text.includes('per_ola'), r.text);
-    assert.ok(r.text.includes('with relation "Nie znam"'), r.text);
-    const both = await ro.call('find_people', { relationship: 'nie znam', q: 'bob' });
-    assert.ok(both.text.includes('per_bob') && !both.text.includes('per_cez'), both.text);
+  await t('find_people keeps one relation ("who is Colleague")', async () => {
+    const r = await ro.call('find_people', { relationship: 'colleague' });
+    assert.ok(r.text.includes('per_bob') && r.text.includes('per_carl') && !r.text.includes('per_alex'), r.text);
+    assert.ok(r.text.includes('with relation "Colleague"'), r.text);
+    const both = await ro.call('find_people', { relationship: 'colleague', q: 'bob' });
+    assert.ok(both.text.includes('per_bob') && !both.text.includes('per_carl'), both.text);
   });
   await t('find_people with an unknown relation lists the types', async () => {
-    const r = await ro.call('find_people', { relationship: 'Wróg' });
-    assert.ok(r.isError && r.text.includes('Nie znam'), r.text);
+    const r = await ro.call('find_people', { relationship: 'Rival' });
+    assert.ok(r.isError && r.text.includes('Colleague'), r.text);
   });
   await t('find_people with several groups: any of them, or all of them', async () => {
-    state.people.find((x) => x.id === 'per_bob').groups.push({ group: { id: 'grp_larp', name: 'LARP' } });
-    state.people.find((x) => x.id === 'per_ola').groups.push({ group: { id: 'grp_larp', name: 'LARP' } });
-    const any = await ro.call('find_people', { groups: ['RPG', 'LARP'] });
-    assert.ok(any.text.includes('per_ola') && any.text.includes('per_bob') && !any.text.includes('per_cez'), any.text);
-    const all = await ro.call('find_people', { groups: ['RPG', 'LARP'], all_groups: true });
-    assert.ok(all.text.includes('per_ola') && !all.text.includes('per_bob'), all.text);
+    state.people.find((x) => x.id === 'per_bob').groups.push({ group: { id: 'grp_chess', name: 'Chess' } });
+    state.people.find((x) => x.id === 'per_alex').groups.push({ group: { id: 'grp_chess', name: 'Chess' } });
+    const any = await ro.call('find_people', { groups: ['Hiking', 'Chess'] });
+    assert.ok(any.text.includes('per_alex') && any.text.includes('per_bob') && !any.text.includes('per_carl'), any.text);
+    const all = await ro.call('find_people', { groups: ['Hiking', 'Chess'], all_groups: true });
+    assert.ok(all.text.includes('per_alex') && !all.text.includes('per_bob'), all.text);
     reset();
   });
   await t('unknown group is explained', async () => {
-    const r = await ro.call('find_people', { group: 'Szachy' });
-    assert.ok(r.isError && r.text.includes('RPG, LARP, Postapo'), r.text);
+    const r = await ro.call('find_people', { group: 'Knitting' });
+    assert.ok(r.isError && r.text.includes('Hiking, Chess, Neighbours'), r.text);
   });
   await t('deep search finds notes and shows a snippet', async () => {
-    const r = await ro.call('find_people', { q: 'kopalni', deep: true });
+    const r = await ro.call('find_people', { q: 'climber', deep: true });
     assert.ok(r.text.includes('per_bob') && r.text.includes('notes'), r.text);
-    const r2 = await ro.call('find_people', { q: 'pyrkon', deep: true });
-    assert.ok(r2.text.includes('per_ola'), r2.text);
+    const r2 = await ro.call('find_people', { q: 'guitar', deep: true });
+    assert.ok(r2.text.includes('per_alex'), r2.text);
   });
   await t('deep search with no hit says so', async () => {
-    const r = await ro.call('find_people', { q: 'nieistniejace', deep: true });
+    const r = await ro.call('find_people', { q: 'nothingmatches', deep: true });
     assert.ok(r.text.startsWith('0 people'), r.text);
   });
   await t('get_person shows relation type label, groups and custom fields', async () => {
-    const r = await ro.call('get_person', { id: 'per_ola' });
-    assert.ok(r.text.includes('groups: RPG'), r.text);
-    assert.ok(r.text.includes('Skąd znam=Pyrkon 2019'), r.text);
-    assert.ok(r.text.includes('Player -> Bob Budowniczy (per_bob)'), r.text);
+    const r = await ro.call('get_person', { id: 'per_alex' });
+    assert.ok(r.text.includes('groups: Hiking'), r.text);
+    assert.ok(r.text.includes('Hometown=Leeds'), r.text);
+    assert.ok(r.text.includes('Report -> Bob Brown (per_bob)'), r.text);
     assert.ok(r.text.includes('last contact: 2026-10-16') && r.text.includes('relation to you: Friend'), r.text);
   });
   await t('get_person rejects a malformed id without calling the API', async () => {
@@ -624,16 +625,16 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   });
   await t('catalog lists groups, types and fields', async () => {
     const r = await ro.call('catalog');
-    assert.ok(r.text.includes('grp_rpg | RPG') && r.text.includes('Game Master') && r.text.includes('Zaufanie | SELECT | niskie, średnie, wysokie'), r.text);
+    assert.ok(r.text.includes('grp_hiking | Hiking') && r.text.includes('Manager') && r.text.includes('Shirt size | SELECT | small, medium, large'), r.text);
   });
   await t('journal lists entries', async () => {
-    const r = await ro.call('journal', { q: 'Pyrkon' });
-    assert.ok(r.text.includes('jr_1') && r.text.includes('Pyrkon'), r.text);
+    const r = await ro.call('journal', { q: 'Birthday party' });
+    assert.ok(r.text.includes('jr_1') && r.text.includes('Birthday party'), r.text);
   });
   await t('journal shows tagged people by name and id (join rows, not "(no name)")', async () => {
     const r = await ro.call('journal');
-    assert.ok(r.text.includes('Aleksandra [per_ola]'), r.text);
-    assert.ok(r.text.includes('Bob Budowniczy [per_bob]'), r.text);
+    assert.ok(r.text.includes('Alexandra [per_alex]'), r.text);
+    assert.ok(r.text.includes('Bob Brown [per_bob]'), r.text);
     assert.ok(!r.text.includes('(no name)'), r.text);
   });
   await t('trash is a read tool and lists nothing when nothing was deleted', async () => {
@@ -679,97 +680,97 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   const writes = () => state.calls.filter((c) => c.method !== 'GET');
   const lastWrite = () => writes().slice(-1)[0];
   const sinceMark = (mark) => state.calls.slice(mark);
-  const ola = () => state.people.find((x) => x.id === 'per_ola');
+  const alex = () => state.people.find((x) => x.id === 'per_alex');
 
   await t('add_person needs a relationship to you and says which types exist', async () => {
     state.calls.length = 0;
-    const r = await rw.call('add_person', { name: 'Dawid' });
-    assert.ok(r.isError && r.text.includes('relationship is required') && r.text.includes('Nie znam'), r.text);
+    const r = await rw.call('add_person', { name: 'David' });
+    assert.ok(r.isError && r.text.includes('relationship is required') && r.text.includes('Colleague'), r.text);
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('add_person sends the relation to you, anniversary/lastContact null, groups by name', async () => {
-    const r = await rw.call('add_person', { name: 'Dawid', surname: 'Nowy', nickname: 'Dave', groups: ['rpg', 'LARP'], notes: 'Z Pyrkonu', relationship: 'poznany' });
-    assert.ok(!r.isError && r.text.startsWith('created per_new') && r.text.includes('relation: Poznany'), r.text);
+    const r = await rw.call('add_person', { name: 'David', surname: 'Newman', nickname: 'Dave', groups: ['hiking', 'Chess'], notes: 'From the party', relationship: 'classmate' });
+    assert.ok(!r.isError && r.text.startsWith('created per_new') && r.text.includes('relation: Classmate'), r.text);
     const w = lastWrite();
     assert.strictEqual(w.path, '/api/people');
     assert.strictEqual(w.body.anniversary, null);
     assert.strictEqual(w.body.lastContact, null);
-    assert.strictEqual(w.body.relationshipToUserId, 'rt_pozn');
-    assert.deepStrictEqual(w.body.groupIds, ['grp_rpg', 'grp_larp']);
+    assert.strictEqual(w.body.relationshipToUserId, 'rt_classmate');
+    assert.deepStrictEqual(w.body.groupIds, ['grp_hiking', 'grp_chess']);
     assert.strictEqual(w.body.connectedThroughId, undefined);
   });
   await t('add_person met_through keeps the relation to you and adds a typed link afterwards', async () => {
     state.calls.length = 0;
-    const r = await rw.call('add_person', { name: 'Ewa', relationship: 'Znam', met_through: 'per_bob', met_through_type: 'Friend' });
+    const r = await rw.call('add_person', { name: 'Eve', relationship: 'Nonexistent type', met_through: 'per_bob', met_through_type: 'Friend' });
     assert.ok(r.isError, 'unknown relation label must fail before anything is created');
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
-    const ok = await rw.call('add_person', { name: 'Ewa', relationship: 'Nie znam', met_through: 'per_bob', met_through_type: 'Friend' });
+    const ok = await rw.call('add_person', { name: 'Eve', relationship: 'Colleague', met_through: 'per_bob', met_through_type: 'Friend' });
     assert.ok(!ok.isError && ok.text.includes('linked to per_bob as Friend'), ok.text);
     const posts = writes();
     assert.strictEqual(posts[0].path, '/api/people');
     assert.strictEqual(posts[0].body.connectedThroughId, undefined, 'connectedThroughId would make Nametag drop the relation to you');
-    assert.strictEqual(posts[0].body.relationshipToUserId, 'rt_nie');
+    assert.strictEqual(posts[0].body.relationshipToUserId, 'rt_colleague');
     assert.strictEqual(posts[1].path, '/api/relationships');
     assert.strictEqual(posts[1].body.relationshipTypeId, 'rt_friend');
-    const ewa = state.people.find((x) => x.name === 'Ewa');
-    assert.strictEqual(ewa.relationshipToUser.label, 'Nie znam');
+    const eve = state.people.find((x) => x.name === 'Eve');
+    assert.strictEqual(eve.relationshipToUser.label, 'Colleague');
   });
   await t('add_person met_through without met_through_type fails before creating anything', async () => {
     state.calls.length = 0;
-    const r = await rw.call('add_person', { name: 'Filip', relationship: 'Nie znam', met_through: 'per_bob' });
+    const r = await rw.call('add_person', { name: 'Frank', relationship: 'Colleague', met_through: 'per_bob' });
     assert.ok(r.isError && r.text.includes('met_through_type'), r.text);
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('add_person: a failing link is a warning, the person still exists', async () => {
-    const r = await rw.call('add_person', { name: 'Gosia', relationship: 'Nie znam', met_through: 'per_gone', met_through_type: 'Friend' });
+    const r = await rw.call('add_person', { name: 'Grace', relationship: 'Colleague', met_through: 'per_gone', met_through_type: 'Friend' });
     assert.ok(!r.isError && r.text.startsWith('created per_new') && r.text.includes('WARNING') && r.text.includes('per_gone'), r.text);
   });
   await t('add_person refuses a duplicate and does not POST', async () => {
     state.calls.length = 0;
-    const r = await rw.call('add_person', { name: 'Aleksandra', surname: 'lukasiewicz', relationship: 'Friend' });
+    const r = await rw.call('add_person', { name: 'Alexandra', surname: 'lukasiewicz', relationship: 'Friend' });
     assert.ok(r.isError && r.text.includes('already exists'), r.text);
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('add_person allow_duplicate creates anyway', async () => {
-    const r = await rw.call('add_person', { name: 'Aleksandra', surname: 'Łukasiewicz', allow_duplicate: true, relationship: 'Friend' });
+    const r = await rw.call('add_person', { name: 'Alexandra', surname: 'Łukasiewicz', allow_duplicate: true, relationship: 'Friend' });
     assert.ok(!r.isError, r.text);
   });
   await t('add_person with an unknown group fails before creating anything', async () => {
     state.calls.length = 0;
-    const r = await rw.call('add_person', { name: 'Ewa2', groups: ['Szachy'], relationship: 'Friend' });
+    const r = await rw.call('add_person', { name: 'Eve2', groups: ['Knitting'], relationship: 'Friend' });
     assert.ok(r.isError && r.text.includes('create_group'), r.text);
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('update_person changes only the fields given (no arrays sent)', async () => {
-    const r = await rw.call('update_person', { id: 'per_cez', surname: 'Czerwony' });
+    const r = await rw.call('update_person', { id: 'per_carl', surname: 'Reed' });
     assert.ok(!r.isError, r.text);
     const w = lastWrite();
-    assert.deepStrictEqual(w.body, { surname: 'Czerwony' });
+    assert.deepStrictEqual(w.body, { surname: 'Reed' });
   });
   await t('update_person custom_fields merges with existing values (no wipe)', async () => {
-    const r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Zaufanie: 'WYSOKIE' } });
+    const r = await rw.call('update_person', { id: 'per_alex', custom_fields: { 'Shirt size': 'LARGE' } });
     assert.ok(!r.isError, r.text);
     const w = lastWrite();
     const vals = Object.fromEntries(w.body.customFieldValues.map((v) => [v.templateId, v.value]));
-    assert.strictEqual(vals.tpl_from, 'Pyrkon 2019');
-    assert.strictEqual(vals.tpl_lvl, 'wysokie');
+    assert.strictEqual(vals.tpl_home, 'Leeds');
+    assert.strictEqual(vals.tpl_size, 'large');
     assert.strictEqual(Object.keys(w.body).length, 1);
   });
   await t('custom field validation: select option, number, empty', async () => {
-    let r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Zaufanie: 'kosmiczne' } });
-    assert.ok(r.isError && r.text.includes('niskie, średnie, wysokie'), r.text);
-    r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Wiek: 'abc' } });
+    let r = await rw.call('update_person', { id: 'per_alex', custom_fields: { 'Shirt size': 'huge' } });
+    assert.ok(r.isError && r.text.includes('small, medium, large'), r.text);
+    r = await rw.call('update_person', { id: 'per_alex', custom_fields: { Age: 'abc' } });
     assert.ok(r.isError && r.text.includes('number'), r.text);
-    r = await rw.call('update_person', { id: 'per_ola', custom_fields: { 'Skąd znam': '  ' } });
+    r = await rw.call('update_person', { id: 'per_alex', custom_fields: { 'Hometown': '  ' } });
     assert.ok(r.isError && r.text.includes('empty'), r.text);
-    r = await rw.call('update_person', { id: 'per_ola', custom_fields: { Nieznane: 'x' } });
-    assert.ok(r.isError && r.text.includes('Skąd znam'), r.text);
+    r = await rw.call('update_person', { id: 'per_alex', custom_fields: { Nieznane: 'x' } });
+    assert.ok(r.isError && r.text.includes('Hometown'), r.text);
   });
   await t('add_nickname appends an alias once, keeps existing', async () => {
-    await rw.call('update_person', { id: 'per_bob', add_nickname: 'Bobbie' });
-    assert.strictEqual(lastWrite().body.nickname, 'Builder, Bobo, Bobbie');
+    await rw.call('update_person', { id: 'per_bob', add_nickname: 'Robbie' });
+    assert.strictEqual(lastWrite().body.nickname, 'Bobby, Rob, Robbie');
     state.calls.length = 0;
-    const r = await rw.call('update_person', { id: 'per_bob', add_nickname: 'bobo' });
+    const r = await rw.call('update_person', { id: 'per_bob', add_nickname: 'rob' });
     assert.ok(r.isError && r.text.includes('nothing to update'), r.text);
     assert.ok(!state.calls.some((c) => c.method === 'PUT'));
   });
@@ -778,180 +779,180 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(r.isError && r.text.includes('100'), r.text);
   });
   await t('append_notes keeps existing text', async () => {
-    await rw.call('update_person', { id: 'per_ola', append_notes: 'Lubi herbatę.' });
+    await rw.call('update_person', { id: 'per_alex', append_notes: 'Likes tea.' });
     const n = lastWrite().body.notes;
-    assert.ok(n.startsWith('Poznana na konwencie') && n.endsWith('\n\nLubi herbatę.'), n);
+    assert.ok(n.startsWith('Met through work') && n.endsWith('\n\nLikes tea.'), n);
   });
   await t('append_notes refuses past the 10000-char limit', async () => {
-    const r = await rw.call('update_person', { id: 'per_ola', append_notes: 'x'.repeat(10000) });
+    const r = await rw.call('update_person', { id: 'per_alex', append_notes: 'x'.repeat(10000) });
     assert.ok(r.isError && r.text.includes('10000'), r.text);
   });
   await t('notes and append_notes together are rejected', async () => {
-    const r = await rw.call('update_person', { id: 'per_ola', notes: 'a', append_notes: 'b' });
+    const r = await rw.call('update_person', { id: 'per_alex', notes: 'a', append_notes: 'b' });
     assert.ok(r.isError, r.text);
   });
   await t('update_person changes the relation to you (and reports the old one)', async () => {
-    const r = await rw.call('update_person', { id: 'per_bob', relationship: 'poznany' });
-    assert.ok(!r.isError && r.text.includes('Nie znam -> Poznany'), r.text);
-    assert.deepStrictEqual(lastWrite().body, { relationshipToUserId: 'rt_pozn' });
-    const bad = await rw.call('update_person', { id: 'per_bob', relationship: 'Wróg' });
-    assert.ok(bad.isError && bad.text.includes('Poznany'), bad.text);
+    const r = await rw.call('update_person', { id: 'per_bob', relationship: 'classmate' });
+    assert.ok(!r.isError && r.text.includes('Colleague -> Classmate'), r.text);
+    assert.deepStrictEqual(lastWrite().body, { relationshipToUserId: 'rt_classmate' });
+    const bad = await rw.call('update_person', { id: 'per_bob', relationship: 'Rival' });
+    assert.ok(bad.isError && bad.text.includes('Classmate'), bad.text);
   });
   await t('update_person sets and clears last_contact by hand, and reports the old date', async () => {
-    const r = await rw.call('update_person', { id: 'per_ola', last_contact: '2026-10-10' });
+    const r = await rw.call('update_person', { id: 'per_alex', last_contact: '2026-10-10' });
     assert.ok(!r.isError && r.text.includes('2026-10-16 -> 2026-10-10'), r.text);
     assert.deepStrictEqual(lastWrite().body, { lastContact: '2026-10-10' });
-    assert.strictEqual(ola().lastContact, iso('2026-10-10'));
+    assert.strictEqual(alex().lastContact, iso('2026-10-10'));
     state.calls.length = 0;
     for (const badDate of ['2026-13-40', '10.10.2026', '2026-02-30']) {
-      const x = await rw.call('update_person', { id: 'per_ola', last_contact: badDate });
+      const x = await rw.call('update_person', { id: 'per_alex', last_contact: badDate });
       assert.ok(x.isError && x.text.includes('YYYY-MM-DD'), x.text);
     }
     assert.ok(!state.calls.some((c) => c.method === 'PUT'));
-    const clear = await rw.call('update_person', { id: 'per_ola', last_contact: '' });
+    const clear = await rw.call('update_person', { id: 'per_alex', last_contact: '' });
     assert.ok(!clear.isError, clear.text);
     assert.deepStrictEqual(lastWrite().body, { lastContact: null });
-    await rw.call('update_person', { id: 'per_ola', last_contact: '2026-10-16' });
+    await rw.call('update_person', { id: 'per_alex', last_contact: '2026-10-16' });
   });
   await t('add_urls / add_emails / add_phones merge with what is there and send only the changed lists', async () => {
     const r = await rw.call('update_person', {
-      id: 'per_ola',
-      add_urls: [{ type: 'youtube', url: 'https://youtube.example/@ola' }, { url: 'https://ERPEGO.example/ola' }],
-      add_emails: [{ type: 'home', email: 'ola@example.com' }],
+      id: 'per_alex',
+      add_urls: [{ type: 'youtube', url: 'https://youtube.example/@alex' }, { url: 'https://SOCIAL.example/alex' }],
+      add_emails: [{ type: 'home', email: 'alex@example.com' }],
     });
     assert.ok(!r.isError, r.text);
     const b = lastWrite().body;
     assert.deepStrictEqual(Object.keys(b).sort(), ['emails', 'urls']);
     assert.deepStrictEqual(b.urls, [
-      { type: 'profile', url: 'https://erpego.example/ola' },
-      { type: 'youtube', url: 'https://youtube.example/@ola' },
+      { type: 'profile', url: 'https://social.example/alex' },
+      { type: 'youtube', url: 'https://youtube.example/@alex' },
     ]);
-    assert.deepStrictEqual(b.emails, [{ type: 'home', email: 'ola@example.com' }]);
-    const phones = await rw.call('update_person', { id: 'per_ola', add_phones: [{ number: '+48 601 000 000' }] });
+    assert.deepStrictEqual(b.emails, [{ type: 'home', email: 'alex@example.com' }]);
+    const phones = await rw.call('update_person', { id: 'per_alex', add_phones: [{ number: '+44 601 000 000' }] });
     assert.ok(!phones.isError, phones.text);
-    assert.deepStrictEqual(lastWrite().body.phoneNumbers, [{ type: 'mobile', number: '+48 600 100 200' }, { type: 'other', number: '+48 601 000 000' }]);
+    assert.deepStrictEqual(lastWrite().body.phoneNumbers, [{ type: 'mobile', number: '+44 600 100 200' }, { type: 'other', number: '+44 601 000 000' }]);
   });
   await t('adding contact data that is already there changes nothing and sends nothing', async () => {
     state.calls.length = 0;
-    const r = await rw.call('update_person', { id: 'per_ola', add_urls: [{ type: 'x', url: 'https://erpego.example/ola' }] });
+    const r = await rw.call('update_person', { id: 'per_alex', add_urls: [{ type: 'x', url: 'https://social.example/alex' }] });
     assert.ok(r.isError && r.text.includes('nothing to update'), r.text);
     assert.ok(!state.calls.some((c) => c.method === 'PUT'));
   });
   await t('remove_contact removes a phone, email or URL by value; an unknown value is an error', async () => {
-    const r = await rw.call('update_person', { id: 'per_ola', remove_contact: ['https://youtube.example/@OLA', 'OLA@example.com'] });
+    const r = await rw.call('update_person', { id: 'per_alex', remove_contact: ['https://youtube.example/@ALEX', 'ALEX@example.com'] });
     assert.ok(!r.isError, r.text);
     const b = lastWrite().body;
-    assert.deepStrictEqual(b.urls, [{ type: 'profile', url: 'https://erpego.example/ola' }]);
+    assert.deepStrictEqual(b.urls, [{ type: 'profile', url: 'https://social.example/alex' }]);
     assert.deepStrictEqual(b.emails, []);
     assert.strictEqual(b.phoneNumbers, undefined);
     state.calls.length = 0;
-    const bad = await rw.call('update_person', { id: 'per_ola', remove_contact: ['nie ma'] });
+    const bad = await rw.call('update_person', { id: 'per_alex', remove_contact: ['nonexistent'] });
     assert.ok(bad.isError && bad.text.includes('no phone, email or URL'), bad.text);
     assert.ok(!state.calls.some((c) => c.method === 'PUT'));
   });
   await t('add_dates / remove_dates use the important-dates routes, never the whole array', async () => {
-    const r = await rw.call('update_person', { id: 'per_ola', add_dates: [{ type: 'nameday', date: '2026-05-12' }, { title: 'Pierwsza sesja', date: '2024-03-01' }] });
+    const r = await rw.call('update_person', { id: 'per_alex', add_dates: [{ type: 'nameday', date: '2026-05-12' }, { title: 'First meeting', date: '2024-03-01' }] });
     assert.ok(!r.isError && r.text.includes('date added'), r.text);
     const posts = writes().slice(-2);
-    assert.ok(posts.every((c) => c.path === '/api/people/per_ola/important-dates'));
+    assert.ok(posts.every((c) => c.path === '/api/people/per_alex/important-dates'));
     assert.deepStrictEqual(posts[0].body, { type: 'nameday', title: '', date: '2026-05-12' });
-    assert.deepStrictEqual(posts[1].body, { type: null, title: 'Pierwsza sesja', date: '2024-03-01' });
-    assert.ok(!writes().slice(-2).some((c) => c.path === '/api/people/per_ola'), 'no PUT of the person for dates only');
-    const dup = await rw.call('update_person', { id: 'per_ola', add_dates: [{ type: 'birthday', date: '1991-01-01' }] });
+    assert.deepStrictEqual(posts[1].body, { type: null, title: 'First meeting', date: '2024-03-01' });
+    assert.ok(!writes().slice(-2).some((c) => c.path === '/api/people/per_alex'), 'no PUT of the person for dates only');
+    const dup = await rw.call('update_person', { id: 'per_alex', add_dates: [{ type: 'birthday', date: '1991-01-01' }] });
     assert.ok(dup.isError && dup.text.includes('already has a birthday'), dup.text);
-    const badDate = await rw.call('update_person', { id: 'per_ola', add_dates: [{ title: 'x', date: '1.1.2020' }] });
+    const badDate = await rw.call('update_person', { id: 'per_alex', add_dates: [{ title: 'x', date: '1.1.2020' }] });
     assert.ok(badDate.isError && badDate.text.includes('YYYY-MM-DD'), badDate.text);
-    const noName = await rw.call('update_person', { id: 'per_ola', add_dates: [{ date: '2020-01-01' }] });
+    const noName = await rw.call('update_person', { id: 'per_alex', add_dates: [{ date: '2020-01-01' }] });
     assert.ok(noName.isError, noName.text);
-    const rm = await rw.call('update_person', { id: 'per_ola', remove_dates: ['birthday'] });
+    const rm = await rw.call('update_person', { id: 'per_alex', remove_dates: ['birthday'] });
     assert.ok(!rm.isError && rm.text.includes('date removed'), rm.text);
-    assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'DELETE', p: '/api/people/per_ola/important-dates/dt_1' });
-    const none = await rw.call('update_person', { id: 'per_ola', remove_dates: ['nie ma takiej'] });
+    assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'DELETE', p: '/api/people/per_alex/important-dates/dt_1' });
+    const none = await rw.call('update_person', { id: 'per_alex', remove_dates: ['no such date'] });
     assert.ok(none.isError, none.text);
   });
   await t('tag_people uses the additive bulk action', async () => {
-    const r = await rw.call('tag_people', { ids: ['per_bob', 'per_cez'], groups: ['postapo', 'LARP'] });
-    assert.ok(!r.isError && r.text.includes('Postapo, LARP'), r.text);
+    const r = await rw.call('tag_people', { ids: ['per_bob', 'per_carl'], groups: ['neighbours', 'Chess'] });
+    assert.ok(!r.isError && r.text.includes('Neighbours, Chess'), r.text);
     const w = lastWrite();
     assert.strictEqual(w.path, '/api/people/bulk');
     assert.strictEqual(w.body.action, 'addToGroups');
-    assert.deepStrictEqual(w.body.groupIds, ['grp_post', 'grp_larp']);
+    assert.deepStrictEqual(w.body.groupIds, ['grp_neighbours', 'grp_chess']);
   });
   await t('untag_people removes memberships one by one and counts non-members', async () => {
     const mark = state.calls.length;
-    const r = await rw.call('untag_people', { ids: ['per_bob', 'per_cez', 'per_ola'], groups: ['postapo'] });
-    assert.ok(!r.isError && r.text.includes('removed 2 membership(s) from: Postapo') && r.text.includes('1 pair(s) were not members'), r.text);
+    const r = await rw.call('untag_people', { ids: ['per_bob', 'per_carl', 'per_alex'], groups: ['neighbours'] });
+    assert.ok(!r.isError && r.text.includes('removed 2 membership(s) from: Neighbours') && r.text.includes('1 pair(s) were not members'), r.text);
     const dels = sinceMark(mark).filter((c) => c.method === 'DELETE');
-    assert.deepStrictEqual(dels.map((c) => c.path), ['/api/groups/grp_post/members/per_bob', '/api/groups/grp_post/members/per_cez', '/api/groups/grp_post/members/per_ola']);
-    assert.ok(state.people.every((x) => !x.groups.some((g) => g.group.id === 'grp_post')));
-    assert.ok(ola().groups.some((g) => g.group.id === 'grp_rpg'), 'other groups stay');
-    assert.ok((await rw.call('untag_people', { ids: [], groups: ['RPG'] })).isError);
-    assert.ok((await rw.call('untag_people', { ids: ['per_bob'], groups: ['Szachy'] })).isError);
+    assert.deepStrictEqual(dels.map((c) => c.path), ['/api/groups/grp_neighbours/members/per_bob', '/api/groups/grp_neighbours/members/per_carl', '/api/groups/grp_neighbours/members/per_alex']);
+    assert.ok(state.people.every((x) => !x.groups.some((g) => g.group.id === 'grp_neighbours')));
+    assert.ok(alex().groups.some((g) => g.group.id === 'grp_hiking'), 'other groups stay');
+    assert.ok((await rw.call('untag_people', { ids: [], groups: ['Hiking'] })).isError);
+    assert.ok((await rw.call('untag_people', { ids: ['per_bob'], groups: ['Knitting'] })).isError);
   });
   await t('set_relationship sets your relation for many people at once', async () => {
-    const r = await rw.call('set_relationship', { ids: ['per_bob', 'per_cez', 'per_missing'], relationship: 'poznany' });
-    assert.ok(!r.isError && r.text.includes('"Poznany" for 2 people') && r.text.includes('1 id(s) were not found'), r.text);
+    const r = await rw.call('set_relationship', { ids: ['per_bob', 'per_carl', 'per_missing'], relationship: 'classmate' });
+    assert.ok(!r.isError && r.text.includes('"Classmate" for 2 people') && r.text.includes('1 id(s) were not found'), r.text);
     const w = lastWrite();
-    assert.deepStrictEqual({ a: w.body.action, t: w.body.relationshipTypeId }, { a: 'setRelationship', t: 'rt_pozn' });
-    assert.strictEqual(state.people.find((x) => x.id === 'per_cez').relationshipToUser.label, 'Poznany');
-    assert.ok((await rw.call('set_relationship', { ids: ['per_bob'], relationship: 'Wróg' })).isError);
+    assert.deepStrictEqual({ a: w.body.action, t: w.body.relationshipTypeId }, { a: 'setRelationship', t: 'rt_classmate' });
+    assert.strictEqual(state.people.find((x) => x.id === 'per_carl').relationshipToUser.label, 'Classmate');
+    assert.ok((await rw.call('set_relationship', { ids: ['per_bob'], relationship: 'Rival' })).isError);
   });
   await t('create_group works and refuses duplicates and bad colors', async () => {
-    let r = await rw.call('create_group', { name: 'Szachy', color: '#112233' });
+    let r = await rw.call('create_group', { name: 'Knitting', color: '#112233' });
     assert.ok(!r.isError && r.text.includes('grp_new'), r.text);
-    r = await rw.call('create_group', { name: 'rpg' });
+    r = await rw.call('create_group', { name: 'hiking' });
     assert.ok(r.isError && r.text.includes('already exists'), r.text);
-    r = await rw.call('create_group', { name: 'Kolor', color: 'red' });
+    r = await rw.call('create_group', { name: 'Colour', color: 'red' });
     assert.ok(r.isError, r.text);
   });
   await t('update_group renames and keeps the description and color (Nametag would wipe them)', async () => {
-    const r = await rw.call('update_group', { group: 'rpg', new_name: 'RPG i MG' });
-    assert.ok(!r.isError && r.text.includes('name: RPG -> RPG i MG'), r.text);
-    assert.deepStrictEqual(lastWrite().body, { name: 'RPG i MG', description: 'sesje', color: '#112233' });
-    assert.strictEqual(state.groups.find((g) => g.id === 'grp_rpg').description, 'sesje');
-    const d = await rw.call('update_group', { group: 'LARP', description: 'Na razie małe RPG' });
+    const r = await rw.call('update_group', { group: 'hiking', new_name: 'Hiking Club' });
+    assert.ok(!r.isError && r.text.includes('name: Hiking -> Hiking Club'), r.text);
+    assert.deepStrictEqual(lastWrite().body, { name: 'Hiking Club', description: 'weekend trips', color: '#112233' });
+    assert.strictEqual(state.groups.find((g) => g.id === 'grp_hiking').description, 'weekend trips');
+    const d = await rw.call('update_group', { group: 'Chess', description: 'Weekly games' });
     assert.ok(!d.isError, d.text);
-    assert.deepStrictEqual(lastWrite().body, { name: 'LARP', description: 'Na razie małe RPG' });
-    const c = await rw.call('update_group', { group: 'LARP', color: '#FF5733' });
-    assert.deepStrictEqual(lastWrite().body, { name: 'LARP', description: 'Na razie małe RPG', color: '#FF5733' });
+    assert.deepStrictEqual(lastWrite().body, { name: 'Chess', description: 'Weekly games' });
+    const c = await rw.call('update_group', { group: 'Chess', color: '#FF5733' });
+    assert.deepStrictEqual(lastWrite().body, { name: 'Chess', description: 'Weekly games', color: '#FF5733' });
     assert.ok(!c.isError);
-    const clear = await rw.call('update_group', { group: 'LARP', description: '' });
+    const clear = await rw.call('update_group', { group: 'Chess', description: '' });
     assert.ok(!clear.isError && lastWrite().body.description === null, clear.text);
   });
   await t('update_group refuses bad input and a taken name', async () => {
     state.calls.length = 0;
-    for (const a of [{ group: 'LARP' }, { group: 'LARP', color: 'red' }, { group: 'LARP', new_name: '  ' }, { group: 'Nie ma' }]) {
+    for (const a of [{ group: 'Chess' }, { group: 'Chess', color: 'red' }, { group: 'Chess', new_name: '  ' }, { group: 'Missing' }]) {
       assert.ok((await rw.call('update_group', a)).isError, JSON.stringify(a));
     }
     assert.ok(!state.calls.some((c) => c.method === 'PUT'));
-    const dup = await rw.call('update_group', { group: 'LARP', new_name: 'postapo' });
+    const dup = await rw.call('update_group', { group: 'Chess', new_name: 'neighbours' });
     assert.ok(dup.isError && dup.text.includes('already exists'), dup.text);
   });
   await t('delete_group deletes only the tag, never with deletePeople', async () => {
     const before = state.people.length;
-    const r = await rw.call('delete_group', { group: 'Szachy' });
+    const r = await rw.call('delete_group', { group: 'Knitting' });
     assert.ok(!r.isError && r.text.includes('deleted group grp_new'), r.text);
     const w = lastWrite();
     assert.deepStrictEqual({ m: w.method, p: w.path, q: w.query }, { m: 'DELETE', p: '/api/groups/grp_new', q: '' });
     assert.strictEqual(state.deletePeople, false);
     assert.strictEqual(state.people.length, before);
-    assert.ok((await rw.call('delete_group', { group: 'Szachy' })).isError);
+    assert.ok((await rw.call('delete_group', { group: 'Knitting' })).isError);
   });
   await t('restore brings a deleted group back with its members; trash shows it meanwhile', async () => {
     state.trash.groups.length = 0; // the earlier delete_group test left one behind
-    await rw.call('create_group', { name: 'Szachy', description: 'x' });
-    await rw.call('tag_people', { ids: ['per_cez'], groups: ['Szachy'] });
-    await rw.call('delete_group', { group: 'Szachy' });
+    await rw.call('create_group', { name: 'Knitting', description: 'x' });
+    await rw.call('tag_people', { ids: ['per_carl'], groups: ['Knitting'] });
+    await rw.call('delete_group', { group: 'Knitting' });
     const tr = await rw.call('trash', { type: 'group' });
-    assert.ok(tr.text.includes('groups (1)') && tr.text.includes('Szachy') && tr.text.includes('30') && !tr.text.includes('people ('), tr.text);
-    const r = await rw.call('restore', { type: 'group', id: 'szachy' });
+    assert.ok(tr.text.includes('groups (1)') && tr.text.includes('Knitting') && tr.text.includes('30') && !tr.text.includes('people ('), tr.text);
+    const r = await rw.call('restore', { type: 'group', id: 'knitting' });
     assert.ok(!r.isError && r.text.includes('restored group grp_new') && r.text.includes('members'), r.text);
     assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'POST', p: '/api/groups/grp_new/restore' });
     assert.ok(state.groups.some((g) => g.id === 'grp_new'));
-    assert.ok(state.people.find((x) => x.id === 'per_cez').groups.some((g) => g.group.id === 'grp_new'), 'membership is back');
-    const again = await rw.call('restore', { type: 'group', id: 'Szachy' });
+    assert.ok(state.people.find((x) => x.id === 'per_carl').groups.some((g) => g.group.id === 'grp_new'), 'membership is back');
+    const again = await rw.call('restore', { type: 'group', id: 'Knitting' });
     assert.ok(again.isError && again.text.includes('nothing in the trash'), again.text);
-    await rw.call('delete_group', { group: 'Szachy' });
+    await rw.call('delete_group', { group: 'Knitting' });
     state.trash.groups.length = 0;
   });
   await t('restore refuses a bad type or an empty id and sends nothing', async () => {
@@ -961,62 +962,62 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('link_people needs a type and resolves its label', async () => {
-    const none = await rw.call('link_people', { person: 'per_cez', related: 'per_bob' });
+    const none = await rw.call('link_people', { person: 'per_carl', related: 'per_bob' });
     assert.ok(none.isError && none.text.includes('type is required'), none.text);
-    const r = await rw.call('link_people', { person: 'per_ola', related: 'per_cez', type: 'game master' });
-    assert.ok(!r.isError && r.text.includes('Game Master'), r.text);
-    assert.strictEqual(lastWrite().body.relationshipTypeId, 'rt_mg');
-    const same = await rw.call('link_people', { person: 'per_ola', related: 'per_ola', type: 'Friend' });
+    const r = await rw.call('link_people', { person: 'per_alex', related: 'per_carl', type: 'manager' });
+    assert.ok(!r.isError && r.text.includes('Manager'), r.text);
+    assert.strictEqual(lastWrite().body.relationshipTypeId, 'rt_manager');
+    const same = await rw.call('link_people', { person: 'per_alex', related: 'per_alex', type: 'Friend' });
     assert.ok(same.isError);
   });
   await t('update_link changes type and notes, keeps notes when only the type changes', async () => {
-    const r = await rw.call('update_link', { person: 'per_ola', related: 'per_bob', type: 'Friend' });
+    const r = await rw.call('update_link', { person: 'per_alex', related: 'per_bob', type: 'Friend' });
     assert.ok(!r.isError && r.text.includes('Friend'), r.text);
     const w = lastWrite();
     assert.strictEqual(w.method, 'PUT');
-    assert.deepStrictEqual(w.body, { relationshipTypeId: 'rt_friend', notes: 'z sesji' });
-    await rw.call('update_link', { person: 'per_ola', related: 'per_bob', notes: 'nowa notatka' });
-    assert.deepStrictEqual(lastWrite().body, { relationshipTypeId: 'rt_friend', notes: 'nowa notatka' });
-    await rw.call('update_link', { person: 'per_ola', related: 'per_bob', notes: '' });
+    assert.deepStrictEqual(w.body, { relationshipTypeId: 'rt_friend', notes: 'from university' });
+    await rw.call('update_link', { person: 'per_alex', related: 'per_bob', notes: 'new note' });
+    assert.deepStrictEqual(lastWrite().body, { relationshipTypeId: 'rt_friend', notes: 'new note' });
+    await rw.call('update_link', { person: 'per_alex', related: 'per_bob', notes: '' });
     assert.deepStrictEqual(lastWrite().body, { relationshipTypeId: 'rt_friend', notes: null });
-    assert.ok((await rw.call('update_link', { person: 'per_ola', related: 'per_bob' })).isError);
-    assert.ok((await rw.call('update_link', { person: 'per_cez', related: 'per_bob', type: 'Friend' })).isError, 'no such link');
+    assert.ok((await rw.call('update_link', { person: 'per_alex', related: 'per_bob' })).isError);
+    assert.ok((await rw.call('update_link', { person: 'per_carl', related: 'per_bob', type: 'Friend' })).isError, 'no such link');
   });
   await t('unlink_people removes one link and its inverse; several links need a type', async () => {
-    await rw.call('link_people', { person: 'per_ola', related: 'per_bob', type: 'Player' });
-    const many = await rw.call('unlink_people', { person: 'per_ola', related: 'per_bob' });
+    await rw.call('link_people', { person: 'per_alex', related: 'per_bob', type: 'Report' });
+    const many = await rw.call('unlink_people', { person: 'per_alex', related: 'per_bob' });
     assert.ok(many.isError && many.text.includes('pass type'), many.text);
-    const wrong = await rw.call('unlink_people', { person: 'per_ola', related: 'per_bob', type: 'Game Master' });
+    const wrong = await rw.call('unlink_people', { person: 'per_alex', related: 'per_bob', type: 'Manager' });
     assert.ok(wrong.isError && wrong.text.includes('existing'), wrong.text);
-    const r = await rw.call('unlink_people', { person: 'per_ola', related: 'per_bob', type: 'Player' });
+    const r = await rw.call('unlink_people', { person: 'per_alex', related: 'per_bob', type: 'Report' });
     assert.ok(!r.isError && r.text.includes('removed link'), r.text);
     assert.strictEqual(lastWrite().method, 'DELETE');
     assert.ok(lastWrite().path.startsWith('/api/relationships/rel_'));
-    const left = await rw.call('unlink_people', { person: 'per_ola', related: 'per_bob' });
+    const left = await rw.call('unlink_people', { person: 'per_alex', related: 'per_bob' });
     assert.ok(!left.isError, left.text);
-    const gone = await rw.call('unlink_people', { person: 'per_ola', related: 'per_bob' });
+    const gone = await rw.call('unlink_people', { person: 'per_alex', related: 'per_bob' });
     assert.ok(gone.isError && gone.text.includes('no link'), gone.text);
-    assert.ok(!personByIdOrNull('per_bob').relationshipsFrom.some((r2) => r2.relatedPersonId === 'per_ola'), 'inverse is gone too');
+    assert.ok(!personByIdOrNull('per_bob').relationshipsFrom.some((r2) => r2.relatedPersonId === 'per_alex'), 'inverse is gone too');
   });
   await t('create_relationship_type: one inverse mode, duplicates refused', async () => {
-    const sym = await rw.call('create_relationship_type', { label: 'Współgracz', symmetric: true, color: '#00FF00' });
+    const sym = await rw.call('create_relationship_type', { label: 'Teammate', symmetric: true, color: '#00FF00' });
     assert.ok(!sym.isError && sym.text.includes('created relationship type'), sym.text);
-    assert.deepStrictEqual({ s: lastWrite().body.symmetric, c: lastWrite().body.color, n: lastWrite().body.name }, { s: true, c: '#00FF00', n: 'Współgracz' });
-    const pair = await rw.call('create_relationship_type', { label: 'Mentor', inverse_label: 'Uczeń' });
-    assert.ok(!pair.isError && pair.text.includes('inverse: Uczeń'), pair.text);
-    const existing = await rw.call('create_relationship_type', { label: 'Kuzyn', inverse: 'friend' });
+    assert.deepStrictEqual({ s: lastWrite().body.symmetric, c: lastWrite().body.color, n: lastWrite().body.name }, { s: true, c: '#00FF00', n: 'Teammate' });
+    const pair = await rw.call('create_relationship_type', { label: 'Mentor', inverse_label: 'Student' });
+    assert.ok(!pair.isError && pair.text.includes('inverse: Student'), pair.text);
+    const existing = await rw.call('create_relationship_type', { label: 'Cousin', inverse: 'friend' });
     assert.ok(!existing.isError, existing.text);
     assert.strictEqual(lastWrite().body.inverseId, 'rt_friend');
     state.calls.length = 0;
-    for (const a of [{ label: 'X' }, { label: 'X', symmetric: true, inverse_label: 'Y' }, { label: 'mentor', symmetric: true }, { label: 'Y', inverse: 'Nieznany' }, { label: 'Z', symmetric: true, color: 'red' }]) {
+    for (const a of [{ label: 'X' }, { label: 'X', symmetric: true, inverse_label: 'Y' }, { label: 'mentor', symmetric: true }, { label: 'Y', inverse: 'Unknown' }, { label: 'Z', symmetric: true, color: 'red' }]) {
       assert.ok((await rw.call('create_relationship_type', a)).isError, JSON.stringify(a));
     }
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('create_custom_field validates type, options and duplicates', async () => {
-    const sel = await rw.call('create_custom_field', { name: 'Poziom', type: 'select', options: ['A', 'B'] });
+    const sel = await rw.call('create_custom_field', { name: 'Level', type: 'select', options: ['A', 'B'] });
     assert.ok(!sel.isError && sel.text.includes('SELECT: A, B'), sel.text);
-    assert.deepStrictEqual(lastWrite().body, { name: 'Poziom', type: 'SELECT', options: ['A', 'B'] });
+    assert.deepStrictEqual(lastWrite().body, { name: 'Level', type: 'SELECT', options: ['A', 'B'] });
     const txt = await rw.call('create_custom_field', { name: 'Hobby', type: 'TEXT' });
     assert.ok(!txt.isError, txt.text);
     assert.deepStrictEqual(lastWrite().body, { name: 'Hobby', type: 'TEXT' });
@@ -1027,32 +1028,32 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   await t('add_journal builds a valid body', async () => {
-    const r = await rw.call('add_journal', { title: 'Sesja', body: 'Grali do rana', date: '2026-06-01', people: ['per_ola'] });
+    const r = await rw.call('add_journal', { title: 'Dinner', body: 'Talked until midnight', date: '2026-06-01', people: ['per_alex'] });
     assert.ok(!r.isError && r.text.includes('jr_new'), r.text);
     const b = lastWrite().body;
     assert.strictEqual(b.date, '2026-06-01T00:00:00.000Z');
     assert.strictEqual(b.hasTime, false);
-    assert.deepStrictEqual(b.personIds, ['per_ola']);
-    const bad = await rw.call('add_journal', { title: 'x', body: 'y', date: 'wczoraj' });
+    assert.deepStrictEqual(b.personIds, ['per_alex']);
+    const bad = await rw.call('add_journal', { title: 'x', body: 'y', date: 'yesterday' });
     assert.ok(bad.isError);
     assert.ok((await rw.call('add_journal', { title: 'x', body: 'y', date: '2026-02-30' })).isError);
   });
   await t('update_journal keeps people, date and time when only the title changes, and never bumps last contact', async () => {
     const lcBefore = state.people.find((x) => x.id === 'per_bob').lastContact;
-    const r = await rw.call('update_journal', { id: 'jr_2', title: 'Sesja Postapo' });
+    const r = await rw.call('update_journal', { id: 'jr_2', title: 'Dinner at the pub' });
     assert.ok(!r.isError && r.text.includes('title'), r.text);
     const w = lastWrite();
     assert.strictEqual(w.method, 'PUT');
     assert.strictEqual(w.path, '/api/journal/jr_2');
-    assert.deepStrictEqual(w.body, { title: 'Sesja Postapo', body: 'Grali do rana', date: iso('2026-06-02'), hasTime: false, personIds: ['per_ola', 'per_bob'], updateLastContact: false });
+    assert.deepStrictEqual(w.body, { title: 'Dinner at the pub', body: 'Talked until midnight', date: iso('2026-06-02'), hasTime: false, personIds: ['per_alex', 'per_bob'], updateLastContact: false });
     assert.strictEqual(state.people.find((x) => x.id === 'per_bob').lastContact, lcBefore);
     const e = state.journal.find((x) => x.id === 'jr_2');
     assert.strictEqual(e.people.length, 2, 'tagged people survived the PUT');
   });
   await t('update_journal: date, body, people (replace / untag all), nothing to update', async () => {
-    let r = await rw.call('update_journal', { id: 'jr_2', date: '2026-06-03', body: 'Poprawiony opis' });
+    let r = await rw.call('update_journal', { id: 'jr_2', date: '2026-06-03', body: 'Corrected text' });
     assert.ok(!r.isError, r.text);
-    assert.deepStrictEqual({ d: lastWrite().body.date, h: lastWrite().body.hasTime, b: lastWrite().body.body }, { d: '2026-06-03T00:00:00.000Z', h: false, b: 'Poprawiony opis' });
+    assert.deepStrictEqual({ d: lastWrite().body.date, h: lastWrite().body.hasTime, b: lastWrite().body.body }, { d: '2026-06-03T00:00:00.000Z', h: false, b: 'Corrected text' });
     r = await rw.call('update_journal', { id: 'jr_2', people: ['per_bob'] });
     assert.deepStrictEqual(lastWrite().body.personIds, ['per_bob']);
     r = await rw.call('update_journal', { id: 'jr_2', people: [] });
@@ -1061,33 +1062,33 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
     r = await rw.call('update_journal', { id: 'jr_2', title: 'x', update_last_contact: true });
     assert.strictEqual(lastWrite().body.updateLastContact, true);
     state.calls.length = 0;
-    for (const a of [{ id: 'jr_2' }, { id: 'jr_2', title: ' ' }, { id: 'jr_2', date: 'wczoraj' }, { id: 'jr_2', people: 'per_ola' }, { id: 'jr_missing', title: 'x' }]) {
+    for (const a of [{ id: 'jr_2' }, { id: 'jr_2', title: ' ' }, { id: 'jr_2', date: 'yesterday' }, { id: 'jr_2', people: 'per_alex' }, { id: 'jr_missing', title: 'x' }]) {
       assert.ok((await rw.call('update_journal', a)).isError, JSON.stringify(a));
     }
     assert.ok(!state.calls.some((c) => c.method === 'PUT'));
   });
   await t('delete_journal removes the entry and returns everything needed to re-create it', async () => {
     const r = await rw.call('delete_journal', { id: 'jr_1' });
-    assert.ok(!r.isError && r.text.includes('title: Pyrkon') && r.text.includes('people: per_ola') && r.text.includes('Spotkanie z Olą') && r.text.includes('no restore'), r.text);
+    assert.ok(!r.isError && r.text.includes('title: Birthday party') && r.text.includes('people: per_alex') && r.text.includes('Met Alex at the party') && r.text.includes('no restore'), r.text);
     assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'DELETE', p: '/api/journal/jr_1' });
     assert.ok(!state.journal.some((x) => x.id === 'jr_1'));
     assert.ok((await rw.call('delete_journal', { id: 'jr_1' })).isError);
   });
   await t('journal edits do not undo a manual last contact date', async () => {
-    await rw.call('update_person', { id: 'per_ola', last_contact: '2026-01-01' });
-    await rw.call('add_journal', { title: 'Pomyłka', body: 'zły wpis', date: '2026-10-18', people: ['per_ola'] });
-    assert.strictEqual(ola().lastContact, iso('2026-10-18'), 'the fake mimics Nametag: a journal entry moves last contact forward');
+    await rw.call('update_person', { id: 'per_alex', last_contact: '2026-01-01' });
+    await rw.call('add_journal', { title: 'Mistake', body: 'wrong entry', date: '2026-10-18', people: ['per_alex'] });
+    assert.strictEqual(alex().lastContact, iso('2026-10-18'), 'the fake mimics Nametag: a journal entry moves last contact forward');
     const id = state.journal[state.journal.length - 1].id;
     await rw.call('delete_journal', { id });
-    assert.strictEqual(ola().lastContact, iso('2026-10-18'), 'deleting the entry does not roll it back');
-    const fix = await rw.call('update_person', { id: 'per_ola', last_contact: '2026-01-01' });
+    assert.strictEqual(alex().lastContact, iso('2026-10-18'), 'deleting the entry does not roll it back');
+    const fix = await rw.call('update_person', { id: 'per_alex', last_contact: '2026-01-01' });
     assert.ok(!fix.isError && fix.text.includes('2026-10-18 -> 2026-01-01'), fix.text);
-    assert.strictEqual(ola().lastContact, iso('2026-01-01'));
+    assert.strictEqual(alex().lastContact, iso('2026-01-01'));
   });
   await t('without the destructive flag delete_person and merge_people refuse and send nothing', async () => {
     state.calls.length = 0;
-    const a = await rw.call('delete_person', { id: 'per_cez' });
-    const b = await rw.call('merge_people', { primary: 'per_ola', secondary: 'per_bob' });
+    const a = await rw.call('delete_person', { id: 'per_carl' });
+    const b = await rw.call('merge_people', { primary: 'per_alex', secondary: 'per_bob' });
     assert.ok(a.isError && /NAMETAG_ENABLE_DESTRUCTIVE/.test(a.text), a.text);
     assert.ok(b.isError && /NAMETAG_ENABLE_DESTRUCTIVE/.test(b.text), b.text);
     assert.strictEqual(state.calls.length, 0);
@@ -1107,33 +1108,33 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   const dx = startServer({ ...base, NAMETAG_ENABLE_WRITE: 'true', NAMETAG_ENABLE_DESTRUCTIVE: 'true' });
   await t('delete_person deletes one person with an explicit "no orphans, no CardDAV" body', async () => {
     state.calls.length = 0;
-    const r = await dx.call('delete_person', { id: 'per_cez' });
-    assert.ok(!r.isError && r.text.includes('deleted per_cez: Cezary') && r.text.includes('30 days'), r.text);
+    const r = await dx.call('delete_person', { id: 'per_carl' });
+    assert.ok(!r.isError && r.text.includes('deleted per_carl: Carl') && r.text.includes('30 days'), r.text);
     const w = lastWrite();
-    assert.deepStrictEqual({ m: w.method, p: w.path, b: w.body }, { m: 'DELETE', p: '/api/people/per_cez', b: { deleteOrphans: false, orphanIds: [], deleteFromCardDav: false } });
-    assert.ok(!state.people.some((x) => x.id === 'per_cez'));
+    assert.deepStrictEqual({ m: w.method, p: w.path, b: w.body }, { m: 'DELETE', p: '/api/people/per_carl', b: { deleteOrphans: false, orphanIds: [], deleteFromCardDav: false } });
+    assert.ok(!state.people.some((x) => x.id === 'per_carl'));
     assert.ok(state.people.length === 2, 'nobody else was deleted');
-    assert.ok((await dx.call('delete_person', { id: 'per_cez' })).isError);
+    assert.ok((await dx.call('delete_person', { id: 'per_carl' })).isError);
     assert.ok((await dx.call('delete_person', { id: '../x' })).isError);
   });
   await t('trash lists a deleted person with its age, restore brings it back by name or id', async () => {
     const tr = await dx.call('trash', { type: 'person' });
-    assert.ok(tr.text.includes('people (1)') && tr.text.includes('per_cez | Cezary') && /\| 27$/m.test(tr.text), tr.text);
-    const byName = await dx.call('restore', { type: 'person', id: 'cezary' });
-    assert.ok(!byName.isError && byName.text.includes('restored person per_cez: Cezary'), byName.text);
-    assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'POST', p: '/api/people/per_cez/restore' });
-    assert.ok(state.people.some((x) => x.id === 'per_cez'));
-    assert.ok((await dx.call('restore', { type: 'person', id: 'per_cez' })).isError, 'not in the trash any more');
-    await dx.call('delete_person', { id: 'per_cez' });
-    const byId = await dx.call('restore', { type: 'person', id: 'per_cez' });
+    assert.ok(tr.text.includes('people (1)') && tr.text.includes('per_carl | Carl') && /\| 27$/m.test(tr.text), tr.text);
+    const byName = await dx.call('restore', { type: 'person', id: 'carl' });
+    assert.ok(!byName.isError && byName.text.includes('restored person per_carl: Carl'), byName.text);
+    assert.deepStrictEqual({ m: lastWrite().method, p: lastWrite().path }, { m: 'POST', p: '/api/people/per_carl/restore' });
+    assert.ok(state.people.some((x) => x.id === 'per_carl'));
+    assert.ok((await dx.call('restore', { type: 'person', id: 'per_carl' })).isError, 'not in the trash any more');
+    await dx.call('delete_person', { id: 'per_carl' });
+    const byId = await dx.call('restore', { type: 'person', id: 'per_carl' });
     assert.ok(!byId.isError, byId.text);
   });
   await t('restore with an ambiguous name asks for the id', async () => {
     state.trash.people.push(
-      { item: makePerson({ id: 'per_t1', name: 'Zdublowany' }), deletedAt: new Date().toISOString() },
-      { item: makePerson({ id: 'per_t2', name: 'Zdublowany' }), deletedAt: new Date().toISOString() }
+      { item: makePerson({ id: 'per_t1', name: 'Doubled' }), deletedAt: new Date().toISOString() },
+      { item: makePerson({ id: 'per_t2', name: 'Doubled' }), deletedAt: new Date().toISOString() }
     );
-    const r = await dx.call('restore', { type: 'person', id: 'Zdublowany' });
+    const r = await dx.call('restore', { type: 'person', id: 'Doubled' });
     assert.ok(r.isError && r.text.includes('per_t1') && r.text.includes('per_t2') && r.text.includes('pass the id'), r.text);
     const ok = await dx.call('restore', { type: 'person', id: 'per_t2' });
     assert.ok(!ok.isError && state.people.some((x) => x.id === 'per_t2'), ok.text);
@@ -1141,35 +1142,35 @@ const DESTRUCTIVE_TOOLS = ['delete_person', 'merge_people'];
   });
   await t('merge_people combines aliases, notes and the later last contact instead of losing them', async () => {
     state.people.push(
-      makePerson({ id: 'per_m1', name: 'Kruk', nickname: 'Kruk', notes: 'Notatka A', lastContact: iso('2026-01-01'), groups: ['grp_rpg'] }),
-      makePerson({ id: 'per_m2', name: 'Kruk', surname: 'Duplikat', nickname: 'Kruczek, kruk', notes: 'Notatka B', lastContact: iso('2026-09-01'), groups: ['grp_larp'] })
+      makePerson({ id: 'per_m1', name: 'Raven', nickname: 'Raven', notes: 'Note A', lastContact: iso('2026-01-01'), groups: ['grp_hiking'] }),
+      makePerson({ id: 'per_m2', name: 'Raven', surname: 'Twin', nickname: 'Ravi, raven', notes: 'Note B', lastContact: iso('2026-09-01'), groups: ['grp_chess'] })
     );
     const r = await dx.call('merge_people', { primary: 'per_m1', secondary: 'per_m2' });
     assert.ok(!r.isError && r.text.includes('merged per_m2') && r.text.includes('into per_m1') && !r.text.includes('WARNING'), r.text);
     const w = lastWrite();
     assert.strictEqual(w.path, '/api/people/merge');
-    assert.deepStrictEqual(w.body.fieldOverrides, { nickname: 'Kruk, Kruczek', notes: 'Notatka A\n\n--- Kruk Duplikat ---\nNotatka B', lastContact: '2026-09-01' });
+    assert.deepStrictEqual(w.body.fieldOverrides, { nickname: 'Raven, Ravi', notes: 'Note A\n\n--- Raven Twin ---\nNote B', lastContact: '2026-09-01' });
     const m1 = state.people.find((x) => x.id === 'per_m1');
-    assert.deepStrictEqual(m1.groups.map((g) => g.group.id).sort(), ['grp_larp', 'grp_rpg']);
+    assert.deepStrictEqual(m1.groups.map((g) => g.group.id).sort(), ['grp_chess', 'grp_hiking']);
     assert.ok(!state.people.some((x) => x.id === 'per_m2'));
   });
   await t('merge_people warns instead of silently dropping what does not fit, and sends no override for equal data', async () => {
     state.people.push(
-      makePerson({ id: 'per_m3', name: 'Lis', nickname: 'a'.repeat(60), notes: 'x'.repeat(6000), lastContact: iso('2026-09-01') }),
-      makePerson({ id: 'per_m4', name: 'Lis', nickname: 'b'.repeat(60), notes: 'y'.repeat(6000), lastContact: iso('2026-01-01') })
+      makePerson({ id: 'per_m3', name: 'Fox', nickname: 'a'.repeat(60), notes: 'x'.repeat(6000), lastContact: iso('2026-09-01') }),
+      makePerson({ id: 'per_m4', name: 'Fox', nickname: 'b'.repeat(60), notes: 'y'.repeat(6000), lastContact: iso('2026-01-01') })
     );
     const r = await dx.call('merge_people', { primary: 'per_m3', secondary: 'per_m4' });
     assert.ok(!r.isError && r.text.includes('WARNING: aliases') && r.text.includes('WARNING: notes'), r.text.slice(0, 400));
     assert.strictEqual(lastWrite().body.fieldOverrides, undefined, 'nothing to override: the primary has the later date and nothing fit');
-    state.people.push(makePerson({ id: 'per_m5', name: 'Rys', nickname: 'Rys', notes: 'Ta sama' }), makePerson({ id: 'per_m6', name: 'Rys', nickname: 'rys', notes: 'Ta sama' }));
+    state.people.push(makePerson({ id: 'per_m5', name: 'Lynx', nickname: 'Lynx', notes: 'Same note' }), makePerson({ id: 'per_m6', name: 'Lynx', nickname: 'lynx', notes: 'Same note' }));
     await dx.call('merge_people', { primary: 'per_m5', secondary: 'per_m6' });
     assert.strictEqual(lastWrite().body.fieldOverrides, undefined);
   });
   await t('merge_people validates its input and stays in the same person set', async () => {
     state.calls.length = 0;
-    assert.ok((await dx.call('merge_people', { primary: 'per_ola', secondary: 'per_ola' })).isError);
-    assert.ok((await dx.call('merge_people', { primary: 'per_ola', secondary: 'per_missing' })).isError);
-    assert.ok((await dx.call('merge_people', { primary: 'x', secondary: 'per_ola' })).isError);
+    assert.ok((await dx.call('merge_people', { primary: 'per_alex', secondary: 'per_alex' })).isError);
+    assert.ok((await dx.call('merge_people', { primary: 'per_alex', secondary: 'per_missing' })).isError);
+    assert.ok((await dx.call('merge_people', { primary: 'x', secondary: 'per_alex' })).isError);
     assert.ok(!state.calls.some((c) => c.method === 'POST'));
   });
   dx.stop();
