@@ -169,14 +169,13 @@ starting with `cannot reach Nametag at ...` points at `NAMETAG_URL` (wrong netwo
 node nametag/test-server.js
 ```
 
-Runs the server against a fake Nametag API (also in CI before the image is built). The
-fake reproduces the Nametag behaviours the server works around (replace-on-update, required
-relationship type, wiped description). The response shapes are taken from Nametag's OpenAPI
-document and source (0.63/0.64). All tools were also run against a live Nametag 0.64.1 on
-throwaway people and groups (2026-10-19), and everything they created was removed again. Not
-tried live: the `inverse_label` and `inverse` modes of `create_relationship_type` (they would
-leave types behind that this connector cannot delete); those are covered by the fake API only. If a newer Nametag changes the
-shapes, `get_person` and `find_people` are the first places to look.
+Runs the server against a fake Nametag API (in CI also before the image is built). The fake
+reproduces the Nametag behaviours the server works around (replace-on-update, required
+relationship type, wiped description). Last checked against a live Nametag 0.64.1. Not tried
+live: the `inverse_label` and `inverse` modes of `create_relationship_type` (they would leave
+types behind that this connector cannot delete); those are covered by the fake API only. If a
+newer Nametag changes the response shapes, `get_person` and `find_people` are the first places
+to look.
 
 ---
 
@@ -354,9 +353,7 @@ node nametag/test-server.js
 
 Uruchamia serwer na fałszywym API Nametaga (w CI także przed zbudowaniem obrazu). Fałszywe
 API odtwarza zachowania Nametaga, które serwer obchodzi (podmiana przy aktualizacji, wymagany
-typ relacji, kasowany opis). Kształty odpowiedzi pochodzą z dokumentu OpenAPI i źródeł
-Nametaga (0.63/0.64). Wszystkie narzędzia przeszły też test na żywym Nametagu 0.64.1 na
-tymczasowych osobach i grupach (2026-10-19), a wszystko, co powstało, zostało usunięte.
-Na żywo nie próbowano trybów `inverse_label` i `inverse` w `create_relationship_type` (zostawiłyby
-typy, których ten konektor nie umie usunąć); obejmuje je tylko fałszywe API. Jeśli nowsza wersja zmieni kształty, pierwsze do
-sprawdzenia są `get_person` i `find_people`.
+typ relacji, kasowany opis). Ostatnio sprawdzone na żywym Nametagu 0.64.1. Na żywo nie
+próbowano trybów `inverse_label` i `inverse` w `create_relationship_type` (zostawiłyby typy,
+których ten konektor nie umie usunąć); obejmuje je tylko fałszywe API. Jeśli nowsza wersja
+zmieni kształty odpowiedzi, pierwsze do sprawdzenia są `get_person` i `find_people`.
