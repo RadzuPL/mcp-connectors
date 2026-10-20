@@ -176,6 +176,25 @@ function request(method, path, body) {
 
 const get = (path) => request('GET', path);
 
+// Nametag >= 0.65.0 answers errors as { error, code, params? } with distinct statuses (409 for
+// duplicates, 413 for oversized uploads, ...). Older versions send { error } only, with 400 for
+// duplicates. Both shapes are handled: `code` is shown when present, never required.
+const FORBIDDEN_HINTS = {
+  plan_limit_reached: 'the plan limit for this resource is reached',
+  subscription_required: 'an active subscription is required',
+  feature_disabled: 'this feature is turned off in Nametag',
+  interactive_session_required: 'this action needs a browser session, not an API token',
+};
+
+function paramsText(params) {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return '';
+  const parts = Object.entries(params)
+    .filter(([, v]) => ['string', 'number', 'boolean'].includes(typeof v))
+    .slice(0, 4)
+    .map(([k, v]) => `${oneLine(k, 30)}=${oneLine(String(v), 60)}`);
+  return parts.length ? ` (${parts.join(', ')})` : '';
+}
+
 function apiFailure(method, path, status, text) {
   let data = null;
   try {
@@ -184,23 +203,32 @@ function apiFailure(method, path, status, text) {
     data = null;
   }
   const msg = data && typeof data.error === 'string' ? data.error : '';
+  const code = data && typeof data.code === 'string' ? oneLine(data.code, 60) : '';
+  const tag = code ? ` [${code}]` : '';
+  const extra = paramsText(data && data.params);
+  const detail = msg ? oneLine(msg, 200) + tag + extra : '';
   const route = path.split('?')[0];
-  if (status === 401) return new ToolError('Nametag rejected the API token (401): check NAMETAG_API_TOKEN_FILE');
+  if (status === 401) {
+    return new ToolError(`Nametag rejected the API token (401${code ? `, ${code}` : ''}): check NAMETAG_API_TOKEN_FILE`);
+  }
   if (status === 403) {
-    return new ToolError(`forbidden (403)${msg ? `: ${oneLine(msg, 160)}` : ''}; a READ-scoped token cannot write, or a plan limit was hit`);
+    const hint = FORBIDDEN_HINTS[code] || 'a READ-scoped token cannot write, or a plan limit was hit';
+    return new ToolError(`forbidden (403)${msg ? `: ${oneLine(msg, 160)}${tag}${extra}` : tag}; ${hint}`);
   }
-  if (status === 404) return new ToolError(`not found: ${msg ? oneLine(msg, 160) : route}`);
-  if (status === 400 && data && Array.isArray(data.details) && data.details.length) {
-    return new ToolError(
-      'validation failed: ' +
-        data.details
-          .slice(0, 6)
-          .map((d) => `${d.field}: ${d.message}`)
-          .join('; ')
-    );
+  if (status === 404) return new ToolError(`not found: ${msg ? oneLine(msg, 160) + tag : route}`);
+  if (status === 409) return new ToolError(`conflict (409): ${detail || route}`);
+  if (status === 413) return new ToolError(`payload too large (413): ${detail || route}`);
+  if (status === 429) return new ToolError(`rate limited (429), try again later: ${detail || route}`);
+  if (status === 400 && data) {
+    const items = Array.isArray(data.details) && data.details.length
+      ? data.details.map((d) => `${d.field}: ${d.message}`)
+      : Array.isArray(data.fields) && data.fields.length
+        ? data.fields.map((f) => `${f.path}: ${f.issue}`)
+        : [];
+    if (items.length) return new ToolError('validation failed: ' + items.slice(0, 6).join('; '));
   }
-  if (status === 400 && msg) return new ToolError(`rejected: ${oneLine(msg, 200)}`);
-  return new ToolError(`Nametag API ${status}${msg ? `: ${oneLine(msg, 200)}` : ''} (${method} ${route})`);
+  if (status === 400 && msg) return new ToolError(`rejected: ${detail}`);
+  return new ToolError(`Nametag API ${status}${detail ? `: ${detail}` : ''} (${method} ${route})`);
 }
 
 // --------------------------------------------------------------- formatting

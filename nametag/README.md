@@ -177,6 +177,11 @@ types behind that this connector cannot delete); those are covered by the fake A
 newer Nametag changes the response shapes, `get_person` and `find_people` are the first places
 to look.
 
+Error messages include the `code` that Nametag 0.65 and newer send with every error
+(`{ "error": ..., "code": ... }`, e.g. `conflict (409): ... [group_name_taken]`). Older versions
+answer without a code and still work. The 0.65 error format comes from its API docs and source
+and is covered by the fake API only.
+
 ---
 
 <a id="polski"></a>
@@ -357,3 +362,8 @@ typ relacji, kasowany opis). Ostatnio sprawdzone na żywym Nametagu 0.64.1. Na �
 próbowano trybów `inverse_label` i `inverse` w `create_relationship_type` (zostawiłyby typy,
 których ten konektor nie umie usunąć); obejmuje je tylko fałszywe API. Jeśli nowsza wersja
 zmieni kształty odpowiedzi, pierwsze do sprawdzenia są `get_person` i `find_people`.
+
+Komunikaty błędów zawierają `code`, który Nametag 0.65 i nowszy wysyła z każdym błędem
+(`{ "error": ..., "code": ... }`, np. `conflict (409): ... [group_name_taken]`). Starsze wersje
+odpowiadają bez kodu i nadal działają. Format błędów z 0.65 pochodzi z jego dokumentacji API
+i kodu źródłowego; obejmuje go tylko fałszywe API.
