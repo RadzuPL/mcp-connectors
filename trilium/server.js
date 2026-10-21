@@ -275,7 +275,8 @@ function decodeHtml(s) {
 const WIKI_RE = /\[\[([A-Za-z0-9_]{4,32})(?:\|([^\]\n]*))?\]\]/g;
 const ANCHOR_RE = /<a\b[^>]*?\bhref="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
 // Matches what Trilium writes for an internal link: "#root/<noteId>" or the full path "#root/a/b/<noteId>".
-const INTERNAL_HREF_RE = /^[^#]*#(?:root\/)?(?:[A-Za-z0-9_]+\/)*([A-Za-z0-9_]{4,32})\/?$/;
+// The #root/ prefix is required, so external links with a #fragment are left alone.
+const INTERNAL_HREF_RE = /^#root\/(?:[A-Za-z0-9_]+\/)*([A-Za-z0-9_]{4,32})\/?$/;
 
 function wikiIds(text) {
   const ids = [];
