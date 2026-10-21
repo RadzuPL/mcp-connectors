@@ -399,7 +399,8 @@ async function toolSearchNotes(args) {
         orderDirection: dir,
       })
   );
-  const rows = (r.json && r.json.results) || [];
+  // ETAPI does not always honour limit, so cut here too.
+  const rows = ((r.json && r.json.results) || []).slice(0, limit);
   const head = `${rows.length} result(s) for "${oneLine(q, 80)}"` + (rows.length >= limit ? ` (limit ${limit} reached: narrow the query or raise limit)` : '');
   if (!rows.length) return `${head}. Syntax: words, "exact phrase", #label, #label=value, ~relation, note.title *=* part`;
   return cap(`${head}\nid | title | type | labels and relations\n` + rows.map((n) => [n.noteId, oneLine(n.title, 100), noteType(n), attrText(n.attributes)].join(' | ')).join('\n'));
@@ -559,6 +560,15 @@ async function toolCreateNote(args) {
   if (!note || !note.noteId) throw new ToolError('Trilium answered but no note came back');
 
   const warnings = [];
+  // ETAPI's create-note does not index the links in the content (no ~internalLink relations, so no
+  // backlinks); a content save does. Save the same content once more when it holds internal links.
+  if (body.type === 'text' && !mime && content.includes(`href="${REF_PREFIX}`)) {
+    try {
+      await request('PUT', `/notes/${enc(note.noteId)}/content`, { text: content });
+    } catch (err) {
+      warnings.push(`links were not indexed (${describeError(err)}); save the note again to fix backlinks`);
+    }
+  }
   for (const [name, value] of labels) {
     try {
       await addAttribute(note.noteId, 'label', name, value);

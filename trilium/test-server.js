@@ -209,6 +209,18 @@ const setFlags = (w, d) => {
     assert.ok(r.text.includes('npcBorin001 | Borin | text | #npc'), r.text);
     assert.ok(!r.text.includes('secret'));
   });
+  await test('search_notes cuts to limit even when the API returns more', async () => {
+    const r = await call('search_notes', { q: '', limit: 2 }).catch(() => null);
+    assert.ok(r && r.isError, 'empty q is refused');
+    const r2 = await call('search_notes', { q: 'o', limit: 2 });
+    assert.ok(/^2 result\(s\)/.test(r2.text), r2.text);
+  });
+  await test('create_note without links does not save the content twice', async () => {
+    setFlags(true, false);
+    const r = await call('create_note', { parent: 'root', title: 'Bez linkow', content: '<p>zwykły tekst</p>' });
+    assert.ok(!r.isError, r.text);
+    assert.ok(!calls.some((c) => c.startsWith('PUT /notes/') && c.endsWith('/content')));
+  });
   await test('search_notes validates depth', async () => {
     const r = await call('search_notes', { q: 'x', depth: 'bad' });
     assert.ok(r.isError);
@@ -251,6 +263,9 @@ const setFlags = (w, d) => {
     assert.ok(content.get(id).includes('<a href="#root/placeKuznia1">kuźni</a>'));
     const a = [...attrs.values()].filter((x) => x.noteId === id);
     assert.strictEqual(a.length, 3);
+    // links are indexed by Trilium only on a content save, so the content is saved once more
+    assert.ok(calls.indexOf(`PUT /notes/${id}/content`) > calls.indexOf('POST /create-note'), calls.join('\n'));
+    assert.strictEqual(content.get(id).includes('class="reference-link"'), true);
   });
   await test('create_note refuses links to missing notes and writes nothing', async () => {
     setFlags(true, false);
