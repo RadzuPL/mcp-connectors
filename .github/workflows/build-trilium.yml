@@ -1,4 +1,4 @@
-name: build-trilium
+name: build-trilium-connector
 
 on:
   workflow_dispatch:
@@ -22,6 +22,7 @@ jobs:
       - name: Tests
         run: |
           node trilium/test-server.js
+          node trilium/test-links.js
           node gateway/test-proxy.js
           node gateway/test-loopback.js
           node gateway/test-shared-session.js
