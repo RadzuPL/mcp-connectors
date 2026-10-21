@@ -16,7 +16,8 @@ streamable-HTTP.
 > front of `supergateway`. **Rebuild, redeploy, then verify**: a request without a token
 > must return `401` (see [`gateway/README.md`](gateway/README.md#verify-your-deployment)).
 > If you copied the old pattern, treat your gateways as unauthenticated until you have.
-> `docker-lite/` (added 2026-10-07) uses the same proxy from its first build.
+> `docker-lite/` (added 2026-10-07), `nametag/` and `trilium/` use the same proxy from
+> their first build.
 
 This repo grew out of connecting an AI agent to a single home server, but nothing in it
 is tied to that server. Every piece here — the gateway pattern, the read-only
@@ -69,10 +70,10 @@ credentials the gateway itself needs to reach the wrapped server.
 
 ## Connectors in this repo
 
-Six connectors are included. Four wrap a different real MCP server; `docker-lite` and
-`nametag` are this repo's own small servers. Full parameter tables and docker-compose
-examples live in each connector's own README. All six share the authenticating front end in
-[`gateway/`](gateway/README.md).
+Seven connectors are included. Four wrap a different real MCP server; `docker-lite`,
+`nametag` and `trilium` are this repo's own small servers. Full parameter tables and
+docker-compose examples live in each connector's own README. All seven share the
+authenticating front end in [`gateway/`](gateway/README.md).
 
 | Connector | Folder | Wraps | Read-only enforced by |
 |---|---|---|---|
@@ -81,6 +82,7 @@ examples live in each connector's own README. All six share the authenticating f
 | files | [`files/`](files/README.md) | the official [`@modelcontextprotocol/server-filesystem`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | `:ro` bind mounts (swap for `:rw` deliberately, per folder, if you want write access) |
 | metrics | [`metrics/`](metrics/README.md) | an SSE-only MCP server (built against [Glances](https://nicolargo.github.io/glances/)) via an `mcp-proxy` + `supergateway` chain | nothing to enforce — the wrapped server only exposes read-only resources and prompts, no tools |
 | nametag | [`nametag/`](nametag/README.md) | its own small Node server over the [Nametag](https://github.com/mattogodoy/nametag) REST API (people, groups, relations, journal): short text answers, read-only by default | a READ-scoped Nametag API token; write tools stay hidden unless `NAMETAG_ENABLE_WRITE=true` (which needs a READ_WRITE token), and deleting or merging people needs `NAMETAG_ENABLE_DESTRUCTIVE=true` on top |
+| trilium | [`trilium/`](trilium/README.md) | its own small Node server over the [TriliumNext](https://github.com/TriliumNext/Trilium) ETAPI (note tree, search, links between notes, labels, relations): short text answers, read-only by default | write tools stay hidden unless `TRILIUM_ENABLE_WRITE=true`, and `delete_note` (a soft delete) needs `TRILIUM_ENABLE_DESTRUCTIVE=true` on top; the ETAPI token itself cannot be scoped, so this is enforced in the connector's request layer |
 | unifi | [`unifi/`](unifi/README.md) | [`unifi-network-mcp`](https://pypi.org/project/unifi-network-mcp/) from PyPI, pinned to a version, over stdio | a view-only local account on the UniFi controller, with the server's own `UNIFI_POLICY_NETWORK_*` gates as a second line |
 
 `docker-lite/` exists to send **less context to the model**: the upstream docker server
@@ -92,8 +94,8 @@ swapping one for the other in place are in its README.
 `metrics/` is the odd one out on purpose: it doesn't vendor a single pinned upstream
 like `docker`, `files` and `unifi`, it composes two independently-versioned off-the-shelf
 tools. See its README for why that means no `UPSTREAM_REF` and no auto-bump job for it.
-`docker-lite/` and `nametag/` are the other exceptions: they are this repo's own code, so
-there is no upstream to pin or bump either.
+`docker-lite/`, `nametag/` and `trilium/` are the other exceptions: they are this repo's
+own code, so there is no upstream to pin or bump either.
 
 ## Exposing a gateway container
 
@@ -105,9 +107,11 @@ Funnel/Serve, nginx + Let's Encrypt, Caddy, anything that can terminate TLS and 
 to a container. Point your MCP client at `https://<your-host>/mcp` with that header.
 
 If you use Cloudflare Tunnel, [`docs/exposing-with-cloudflare-tunnel.md`](docs/exposing-with-cloudflare-tunnel.md)
-walks through one concrete setup, including two gotchas worth knowing about up front:
-an operator-precedence trap in Cloudflare's rule expressions, and a real upstream bug
-in Glances that breaks any reverse-proxied deployment on the default HTTPS port.
+walks through one concrete setup, including the gotchas worth knowing about up front:
+an operator-precedence trap in Cloudflare's rule expressions, a real upstream bug in
+Glances that breaks any reverse-proxied deployment on the default HTTPS port, how to
+serve an app's web UI and its `/mcp` endpoint from one hostname (tunnel routes, Access
+bypass, path-scoped WAF groups), and the two-Docker-networks trap for the app's address.
 
 ## Semi-automatic upstream updates
 
@@ -127,9 +131,9 @@ off-the-shelf tools (`mcp-proxy`, `supergateway`) installed straight from PyPI/n
 Dockerfile. It has no `UPSTREAM_REF` and `check-upstream.yml` has no job for it —
 bumping those package versions (including the `mcp<2.0` pin, see its README) is a manual
 edit to `metrics/Dockerfile.gateway` when needed. The same goes for the pinned
-`supergateway` version (`SUPERGATEWAY_VERSION`) that every Dockerfile uses. `docker-lite/`
-and `nametag/` also have no `UPSTREAM_REF`: their servers are in this repo, and they build
-when their own files or `gateway/` change.
+`supergateway` version (`SUPERGATEWAY_VERSION`) that every Dockerfile uses. `docker-lite/`,
+`nametag/` and `trilium/` also have no `UPSTREAM_REF`: their servers are in this repo, and
+they build when their own files or `gateway/` change.
 
 Every built image gets an immutable tag alongside `:latest`, so you can always roll back
 to a specific build. Images publish to `ghcr.io/<your-github-user-or-org>/<this-repo>/<connector>`
@@ -165,7 +169,8 @@ dowolnym innym kliencie MCP, który mówi streamable-HTTP.
 > **Zbuduj, wdróż ponownie i sprawdź**: żądanie bez tokenu musi zwrócić `401` (zobacz
 > [`gateway/README.md`](gateway/README.md#sprawdź-swój-deployment)). Jeśli skopiowałeś stary
 > wzorzec, traktuj swoje bramki jako nieuwierzytelnione, dopóki tego nie zrobisz.
-> `docker-lite/` (dodany 2026-10-07) używa tego samego proxy od pierwszego builda.
+> `docker-lite/` (dodany 2026-10-07), `nametag/` i `trilium/` używają tego samego proxy od
+> pierwszego builda.
 
 To repo wzięło się z podłączania agenta AI do jednego konkretnego domowego serwera, ale
 nic tu nie jest do niego przywiązane. Każdy element — wzorzec gatewaya, wymuszanie trybu
@@ -220,10 +225,10 @@ sam gateway potrzebuje, żeby dostać się do opakowywanego serwera.
 
 ### Connectory w tym repo
 
-W repo jest sześć connectorów. Cztery opakowują inny, prawdziwy serwer MCP, a `docker-lite`
-i `nametag` to własne, małe serwery tego repo. Pełne tabele parametrów i przykłady
-docker-compose są w README każdego connectora. Wszystkie sześć korzysta ze wspólnego frontu z
-uwierzytelnianiem w [`gateway/`](gateway/README.md).
+W repo jest siedem connectorów. Cztery opakowują inny, prawdziwy serwer MCP, a
+`docker-lite`, `nametag` i `trilium` to własne, małe serwery tego repo. Pełne tabele
+parametrów i przykłady docker-compose są w README każdego connectora. Wszystkie siedem
+korzysta ze wspólnego frontu z uwierzytelnianiem w [`gateway/`](gateway/README.md).
 
 | Connector | Folder | Opakowuje | Tryb tylko-do-odczytu wymuszony przez |
 |---|---|---|---|
@@ -232,6 +237,7 @@ uwierzytelnianiem w [`gateway/`](gateway/README.md).
 | files | [`files/`](files/README.md) | oficjalny [`@modelcontextprotocol/server-filesystem`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem) | mounty `:ro` (świadomie zamieniane na `:rw` per folder, jeśli chcesz dostęp do zapisu) |
 | metrics | [`metrics/`](metrics/README.md) | serwer MCP tylko-SSE (zbudowany i przetestowany na [Glances](https://nicolargo.github.io/glances/)) przez łańcuch `mcp-proxy` + `supergateway` | nie ma czego wymuszać — opakowywany serwer wystawia tylko zasoby (resources) i prompty do odczytu, zero narzędzi (tools) |
 | nametag | [`nametag/`](nametag/README.md) | własny, mały serwer w Node nad REST API [Nametaga](https://github.com/mattogodoy/nametag) (ludzie, grupy, powiązania, dziennik): krótkie odpowiedzi tekstem, domyślnie tylko do odczytu | token API Nametaga z zakresem READ; narzędzia zapisu są ukryte, dopóki nie ustawisz `NAMETAG_ENABLE_WRITE=true` (wymaga tokenu READ_WRITE), a usuwanie i scalanie osób wymaga dodatkowo `NAMETAG_ENABLE_DESTRUCTIVE=true` |
+| trilium | [`trilium/`](trilium/README.md) | własny, mały serwer w Node nad ETAPI [TriliumNext](https://github.com/TriliumNext/Trilium) (drzewo notatek, wyszukiwanie, linki między notatkami, etykiety, relacje): krótkie odpowiedzi tekstem, domyślnie tylko do odczytu | narzędzia zapisu są ukryte, dopóki nie ustawisz `TRILIUM_ENABLE_WRITE=true`, a `delete_note` (miękkie usunięcie) wymaga dodatkowo `TRILIUM_ENABLE_DESTRUCTIVE=true`; sam token ETAPI nie ma zakresów, więc ograniczenie wymusza warstwa żądań w connectorze |
 | unifi | [`unifi/`](unifi/README.md) | [`unifi-network-mcp`](https://pypi.org/project/unifi-network-mcp/) z PyPI, przypięty do wersji, po stdio | lokalne konto tylko do podglądu na kontrolerze UniFi, a własne bramki `UNIFI_POLICY_NETWORK_*` serwera jako druga linia |
 
 `docker-lite/` powstał, żeby wysyłać **mniej kontekstu do modelu**: upstreamowy serwer
@@ -243,8 +249,8 @@ na drugi w miejscu są w jego README.
 `metrics/` jest wyjątkiem celowo: nie opakowuje jednego przypiętego upstreamu jak
 `docker`, `files` i `unifi`, tylko składa dwa niezależnie wersjonowane, gotowe narzędzia.
 Zobacz jego README, dlaczego oznacza to brak `UPSTREAM_REF` i brak joba auto-bumpującego.
-`docker-lite/` i `nametag/` są kolejnymi wyjątkami: to własny kod tego repo, więc też nie
-mają upstreamu do przypinania ani bumpowania.
+`docker-lite/`, `nametag/` i `trilium/` są kolejnymi wyjątkami: to własny kod tego repo,
+więc też nie mają upstreamu do przypinania ani bumpowania.
 
 ### Wystawianie kontenera gatewaya
 
@@ -257,9 +263,12 @@ przekazać ruch do kontenera. Skieruj swojego klienta MCP na `https://<twój-hos
 tym nagłówkiem.
 
 Jeśli używasz Cloudflare Tunnel, [`docs/exposing-with-cloudflare-tunnel.md`](docs/exposing-with-cloudflare-tunnel.md)
-prowadzi przez jeden konkretny setup, razem z dwiema pułapkami, o których warto wiedzieć
-z góry: kolejnością operatorów w wyrażeniach reguł Cloudflare i prawdziwym bugiem w
-Glances, który psuje każdy deployment za reverse proxy na domyślnym porcie HTTPS.
+prowadzi przez jeden konkretny setup, razem z pułapkami, o których warto wiedzieć z góry:
+kolejnością operatorów w wyrażeniach reguł Cloudflare, prawdziwym bugiem w Glances, który
+psuje każdy deployment za reverse proxy na domyślnym porcie HTTPS, wystawianiem
+interfejsu WWW aplikacji i jej endpointu `/mcp` pod jednym hostname (trasy tunelu, bypass
+w Access, grupy reguł WAF ograniczone do ścieżki) oraz pułapką dwóch sieci Dockera przy
+adresie aplikacji.
 
 ### Pół-automatyczne aktualizacje upstreamu
 
@@ -280,8 +289,8 @@ Dockerfile. Nie ma tu `UPSTREAM_REF`, a `check-upstream.yml` nie ma dla niego jo
 aktualizacja wersji tych pakietów (w tym pin `mcp<2.0`, zobacz jego README) to ręczna
 edycja `metrics/Dockerfile.gateway`, gdy zajdzie potrzeba. To samo dotyczy przypiętej
 wersji `supergateway` (`SUPERGATEWAY_VERSION`), której używają wszystkie Dockerfile.
-`docker-lite/` i `nametag/` też nie mają `UPSTREAM_REF`: ich serwery leżą w tym repo, a build
-odpala się, gdy zmienią się ich pliki albo `gateway/`.
+`docker-lite/`, `nametag/` i `trilium/` też nie mają `UPSTREAM_REF`: ich serwery leżą w tym
+repo, a build odpala się, gdy zmienią się ich pliki albo `gateway/`.
 
 Każdy zbudowany obraz dostaje, obok `:latest`, własny niezmienny tag, więc zawsze można
 wrócić do konkretnego builda. Obrazy publikują się pod
