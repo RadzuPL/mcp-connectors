@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>mcp-trilium-connector</Name>
+  <Repository>ghcr.io/radzupl/mcp-connectors/trilium:latest</Repository>
+  <Registry>https://github.com/RadzuPL/mcp-connectors/pkgs/container/mcp-connectors%2Ftrilium</Registry>
+  <Network>mcp_network</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/RadzuPL/mcp-connectors/issues</Support>
+  <Project>https://github.com/RadzuPL/mcp-connectors/tree/master/trilium</Project>
+  <Overview>MCP connector for TriliumNext (ETAPI): search, read and write notes, links, labels and relations. Read-only by default.</Overview>
+  <Category>Tools:</Category>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <TemplateURL>https://raw.githubusercontent.com/RadzuPL/mcp-connectors/master/trilium/unraid/mcp-trilium-connector.xml</TemplateURL>
+  <Config Name="TRILIUM_URL" Target="TRILIUM_URL" Default="http://triliumnext:8080" Mode="" Description="Address of TriliumNext as seen from the mcp_network" Type="Variable" Display="always" Required="true" Mask="false">http://triliumnext:8080</Config>
+  <Config Name="TRILIUM_TOKEN_FILE" Target="TRILIUM_TOKEN_FILE" Default="/run/secrets/trilium_etapi_token" Mode="" Description="Path inside the container to the ETAPI token (leave as is)" Type="Variable" Display="advanced" Required="true" Mask="false">/run/secrets/trilium_etapi_token</Config>
+  <Config Name="MCP_BEARER_TOKEN_FILE" Target="MCP_BEARER_TOKEN_FILE" Default="/run/secrets/mcp_bearer_token" Mode="" Description="Path inside the container to the bearer token that Claude uses (leave as is)" Type="Variable" Display="advanced" Required="true" Mask="false">/run/secrets/mcp_bearer_token</Config>
+  <Config Name="TRILIUM_ENABLE_WRITE" Target="TRILIUM_ENABLE_WRITE" Default="false" Mode="" Description="true: create, edit, move notes, labels, relations" Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="TRILIUM_ENABLE_DESTRUCTIVE" Target="TRILIUM_ENABLE_DESTRUCTIVE" Default="false" Mode="" Description="true: also delete_note (needs write; soft delete)" Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Bearer token file" Target="/run/secrets/mcp_bearer_token" Default="/mnt/user/appdata/mcp-trilium/bearer_token" Mode="ro" Description="Host file with the bearer token for Claude" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/mcp-trilium/bearer_token</Config>
+  <Config Name="ETAPI token file" Target="/run/secrets/trilium_etapi_token" Default="/mnt/user/appdata/mcp-trilium/trilium_etapi_token" Mode="ro" Description="Host file with the ETAPI token (Trilium: Options > ETAPI)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/mcp-trilium/trilium_etapi_token</Config>
+</Container>
